@@ -569,24 +569,33 @@ h3 {
 .legend-dot.outside { background: var(--risk); }
 .legend-dot.lambda { background: var(--brass); }
 .legend-dot.posthoc { background: var(--safe); }
-.legend-dot.baseline { background: #3b6ea5; }
+.legend-dot.lambdahat { background: #fbfbf7; border: 2px solid #7a4b7c; box-sizing: border-box; width: 10px; height: 10px; }
+.legend-dot.hollow { background: #fbfbf7; border: 1.5px solid var(--accent); box-sizing: border-box; }
 
 .legend-swatch { width: 14px; height: 9px; border-radius: 2px; display: inline-block; }
-.legend-swatch.set { background: rgba(36, 66, 90, 0.14); border: 1px solid rgba(36, 66, 90, 0.5); }
+.legend-swatch.set { background: rgba(176, 127, 49, 0.14); border: 1px solid rgba(138, 97, 31, 0.8); }
+.legend-swatch.density { background: rgba(36, 66, 90, 0.22); }
+.legend-grad {
+  width: 34px; height: 9px; border-radius: 2px; display: inline-block;
+  background: linear-gradient(90deg, #1e3a50, #3f6a86, #8fb0bf, #d6d9cf, #f3efe4);
+  border: 1px solid rgba(36, 66, 90, 0.35);
+}
+.legend-diamond {
+  width: 8px; height: 8px; display: inline-block; background: var(--risk); transform: rotate(45deg); margin: 0 2px;
+}
 
 .legend-line { width: 16px; height: 0; display: inline-block; border-top: 2px solid; }
 .legend-line.true { border-color: #9aa79a; border-top-style: dashed; }
 .legend-line.certified { border-color: var(--accent); }
+.legend-line.posthoc { border-color: var(--safe); border-top-width: 1.5px; }
+.legend-line.pref { border-color: #7a4b7c; border-top-style: dashed; }
 
 .stat-row {
   display: grid;
-  grid-template-columns: repeat(3, 1fr) 0fr;
+  grid-template-columns: repeat(3, 1fr) 1.6fr;
   gap: 10px;
   margin-top: 14px;
-  transition: grid-template-columns 220ms ease;
 }
-
-.stat-row:has(.stat-card-wide:not([hidden])) { grid-template-columns: repeat(3, 1fr) 1.6fr; }
 
 .stat-card {
   padding: 12px 14px;
@@ -736,7 +745,6 @@ h3 {
   .control-wide { grid-column: span 2; }
   .demo-grid { grid-template-columns: 1fr; }
   .stat-row { grid-template-columns: 1fr 1fr; }
-  .stat-row:has(.stat-card-wide:not([hidden])) { grid-template-columns: 1fr 1fr; }
   .stat-card-wide { grid-column: 1 / -1; }
   .nav { flex-wrap: wrap; height: auto; padding: 10px 0; gap: 8px 18px; }
   .nav-links { gap: 14px 18px; flex-wrap: wrap; }

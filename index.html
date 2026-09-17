@@ -199,8 +199,9 @@
         <h2>Dial the robustness level, watch the frontier respond</h2>
         <p class="lead">
           Four classical decision problems from the paper's experiments. Drag \(\lambda\) to move the robust
-          decision and re-price its risk; use the preference slider to let a simulated decision-maker pick
-          \(\hat\lambda\) off the frontier and watch CREME recalibrate on held-out data.
+          decision and re-price its risk. The preference slider is a simulated decision-maker: it tilts a
+          tangent line against the pre-hoc frontier, picks \(\hat\lambda\) where it touches, and CREME
+          re-scores that \(\hat\lambda\) on the held-out split \(\mathcal D_2\) live.
         </p>
       </div>
 
@@ -239,13 +240,13 @@
             </div>
             <div class="control-group control-wide">
               <div class="control-label-row">
-                <label for="ctrl-pref">Decision-maker preference: risk &#8596; cost</label>
+                <label for="ctrl-pref">Decision-maker preference: miscoverage &#8596; regret (tangent slope)</label>
               </div>
               <input id="ctrl-pref" type="range" min="0" max="1" step="0.02" value="0.5">
               <output id="ctrl-pref-value" for="ctrl-pref">balanced</output>
             </div>
             <div class="control-group control-action">
-              <button class="control-button" id="btn-select" type="button">Select \(\hat\lambda\) &amp; recalibrate</button>
+              <button class="control-button" id="btn-select" type="button">Set \(\lambda \leftarrow \hat\lambda\)</button>
             </div>
             <div class="control-group control-action">
               <button class="control-button secondary" id="btn-resample" type="button">Resample data</button>
@@ -257,7 +258,7 @@
           <article class="demo-panel">
             <div class="demo-panel-heading">
               <h3 id="decision-heading">Decision space</h3>
-              <p id="decision-subtitle">The robust decision \(z^*_\lambda\) at the current \(\lambda\).</p>
+              <p id="decision-subtitle">Objective value over the feasible set and its minimiser \(z^*_\lambda\).</p>
             </div>
             <canvas id="decision-canvas" width="360" height="300" aria-label="Decision space"></canvas>
             <div class="demo-legend" id="decision-legend"></div>
@@ -270,24 +271,29 @@
             </div>
             <canvas id="outcome-canvas" width="360" height="300" aria-label="Outcome space"></canvas>
             <div class="demo-legend">
+              <span><i class="legend-swatch density"></i>data density of \(Y\)</span>
+              <span><i class="legend-swatch set"></i>\(\mathcal U_\lambda(X)\)</span>
               <span><i class="legend-dot inside"></i>\(Y\in\mathcal U_\lambda\)</span>
               <span><i class="legend-dot outside"></i>\(Y\notin\mathcal U_\lambda\)</span>
-              <span><i class="legend-swatch set"></i>\(\mathcal U_\lambda(X)\)</span>
+              <span><i class="legend-dot hollow"></i>held-out \(\mathcal D_2\)</span>
+              <span><i class="legend-diamond"></i>worst case \(y^*=\argmax_{y\in\mathcal U_\lambda} f(y,z^*_\lambda)\)</span>
             </div>
           </article>
 
           <article class="demo-panel frontier-panel">
             <div class="demo-panel-heading">
               <h3>Miscoverage &ndash; regret frontier</h3>
-              <p>Drag \(\lambda\) above; the amber marker follows the certified curve.</p>
+              <p>Amber follows \(\lambda\) along the \(\mathcal D_1\) curve; the preference line is tangent to the pre-hoc frontier at \(\hat\lambda\), which is then re-scored on \(\mathcal D_2\).</p>
             </div>
             <svg id="frontier-svg" viewBox="0 0 360 300" role="img" aria-label="Pareto frontier plot"></svg>
             <div class="demo-legend">
-              <span><i class="legend-line true"></i>True frontier (large-\(N\) reference)</span>
-              <span><i class="legend-line certified"></i>Certified pre-hoc frontier</span>
+              <span><i class="legend-line true"></i>True curve (large-\(N\) reference)</span>
+              <span><i class="legend-line certified"></i>Certified pre-hoc curve \((\mathcal D_1)\)</span>
+              <span><i class="legend-line posthoc"></i>Certified post-hoc curve \((\mathcal D_2)\)</span>
               <span><i class="legend-dot lambda"></i>Current \(\lambda\)</span>
-              <span><i class="legend-dot posthoc"></i>Post-hoc \((\hat\lambda)\)</span>
-              <span><i class="legend-dot baseline"></i>5%-miscoverage heuristic</span>
+              <span><i class="legend-line pref"></i>Preference line (tangent)</span>
+              <span><i class="legend-dot lambdahat"></i>\(\hat\lambda\) pre-hoc</span>
+              <span><i class="legend-dot posthoc"></i>\(\hat\lambda\) post-hoc</span>
             </div>
           </article>
         </div>
@@ -308,10 +314,10 @@
             <span class="stat-value" id="stat-epsilon">&mdash;</span>
             <span class="stat-sub">finite-sample bound, prob. \(1-\delta\)</span>
           </div>
-          <div class="stat-card stat-card-wide" id="stat-posthoc-card" hidden>
+          <div class="stat-card stat-card-wide" id="stat-posthoc-card">
             <span class="stat-label">post-hoc at \(\hat\lambda=\)<span id="stat-lambda-hat"></span></span>
             <span class="stat-value" id="stat-posthoc">&mdash;</span>
-            <span class="stat-sub">recalibrated on held-out split \(\mathcal D_2\)</span>
+            <span class="stat-sub" id="stat-posthoc-sub">recalibrated on held-out split \(\mathcal D_2\)</span>
           </div>
         </div>
 
