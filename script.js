@@ -921,6 +921,11 @@
     parts.push(texMarkup("\\text{miscoverage } \\hat\\alpha_I(\\lambda)", "miscoverage αI(λ)", (w + padL) / 2, h - 6, { color: MUTED, px: 10, anchor: "middle" }));
     parts.push(texMarkup("\\text{regret } \\hat\\alpha_R(\\lambda)", "regret αR(λ)", 14, (h - padB) / 2, { color: MUTED, px: 10, anchor: "middle", rotate: -90 }));
 
+    // conformal floor: the certified miscoverage can never go below B/(n+1) = 1/(n1+1)
+    const floor = 1 / (state.calibD1.length + 1);
+    parts.push(`<line x1="${fmt(sx(floor))}" y1="${padT}" x2="${fmt(sx(floor))}" y2="${h - padB}" stroke="${MUTED}" stroke-width="1" stroke-dasharray="1.5 3" stroke-opacity="0.7"/>`);
+    parts.push(texMarkup("\\tfrac{1}{n_1+1}", "1/(n1+1)", sx(floor) + 5, padT + 10, { color: MUTED, px: 10 }));
+
     // curves
     parts.push(`<path d="${pathFor(state.trueCurve)}" fill="none" stroke="#9aa79a" stroke-width="1.6" stroke-dasharray="4 3"/>`);
     parts.push(`<path d="${pathFor(state.postHoc)}" fill="none" stroke="${SAFE}" stroke-width="1.5" stroke-opacity="0.85"/>`);
