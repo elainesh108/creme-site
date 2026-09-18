@@ -200,8 +200,9 @@
         <h2>Dial the robustness level, watch the frontier respond</h2>
         <p class="lead">
           Four classical decision problems from the paper's experiments. Drag \(\lambda\) to move the robust
-          decision and re-price its risk. In the decision panel, drag the feasible region's vertices to reshape
-          the problem, or drag the hollow marker to compare any candidate decision against \(z^*_\lambda\). The preference slider is a simulated decision-maker: it tilts a
+          decision and re-price its risk. Every decision space is editable: drag the polytope's vertices, the
+          order or position limits, or the network's nodes to reshape the problem, and drag the hollow marker
+          to compare any candidate decision against \(z^*_\lambda\). The preference slider is a simulated decision-maker: it tilts a
           tangent line against the pre-hoc frontier, picks \(\hat\lambda\) where it touches, and CREME
           re-scores that \(\hat\lambda\) on the held-out split \(\mathcal D_2\) live.
         </p>
@@ -263,11 +264,13 @@
               <p id="decision-subtitle">Objective value over the feasible set and its minimiser \(z^*_\lambda\).</p>
             </div>
             <canvas id="decision-canvas" width="360" height="300" aria-label="Decision space: drag the vertices or the candidate decision"></canvas>
-            <div class="panel-tools" id="lp-tools">
-              <label for="ctrl-vertices">Vertices \(m\)</label>
-              <select id="ctrl-vertices" aria-label="Number of vertices">
-                <option>3</option><option>4</option><option>5</option><option selected>6</option><option>7</option><option>8</option>
-              </select>
+            <div class="panel-tools">
+              <span class="panel-tools-group" id="lp-vertex-ctl">
+                <label for="ctrl-vertices">Vertices \(m\)</label>
+                <select id="ctrl-vertices" aria-label="Number of vertices">
+                  <option>3</option><option>4</option><option>5</option><option selected>6</option><option>7</option><option>8</option>
+                </select>
+              </span>
               <button class="link-button" id="btn-reset-z" type="button">Reset \(\mathcal Z\)</button>
             </div>
             <div class="demo-legend" id="decision-legend"></div>

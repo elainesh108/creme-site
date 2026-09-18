@@ -134,7 +134,7 @@
 
   /* One-dimensional decision space: objective curve + gradient strip + minimiser. */
   function draw1DDecision(ctx, w, h, opts) {
-    const { zMin, zMax, objective, zStar, candidate, xLabel, objLabel, ticks, fmtTick } = opts;
+    const { zMin, zMax, objective, zStar, candidate, bounds, xLabel, objLabel, ticks, fmtTick } = opts;
     const padL = 36, padR = 22, curveTop = 30, curveBot = 172, stripY = 206, stripH = 26;
     const sx = (z) => padL + ((z - zMin) / (zMax - zMin)) * (w - padL - padR);
     const N = 240, vals = [];
@@ -149,8 +149,21 @@
       ctx.fillStyle = rampColor((vals[i][1] - lo) / span);
       ctx.fillRect(sx(vals[i][0]), stripY, sx(vals[i + 1][0]) - sx(vals[i][0]) + 0.6, stripH);
     }
+    // infeasible parts of the axis (outside the draggable limits) are greyed out
+    const [bLo, bHi] = bounds;
+    ctx.fillStyle = "rgba(238,240,233,0.82)";
+    if (bLo > zMin) ctx.fillRect(sx(zMin), stripY, sx(bLo) - sx(zMin), stripH);
+    if (bHi < zMax) ctx.fillRect(sx(bHi), stripY, sx(zMax) - sx(bHi), stripH);
     ctx.strokeStyle = "rgba(36,66,90,0.5)"; ctx.lineWidth = 1;
     ctx.strokeRect(sx(zMin), stripY, sx(zMax) - sx(zMin), stripH);
+    // limit handles: a bar through the strip with a square grip above it
+    const handleY = stripY - 9;
+    [bLo, bHi].forEach((b) => {
+      ctx.strokeStyle = ACCENT; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(sx(b), stripY - 4); ctx.lineTo(sx(b), stripY + stripH + 4); ctx.stroke();
+      ctx.fillStyle = "#fbfbf7"; ctx.lineWidth = 1.6;
+      ctx.beginPath(); ctx.rect(sx(b) - 4.5, handleY - 4.5, 9, 9); ctx.fill(); ctx.stroke();
+    });
     ticks.forEach((t) => {
       ctx.beginPath(); ctx.moveTo(sx(t), stripY + stripH); ctx.lineTo(sx(t), stripY + stripH + 4); ctx.stroke();
       label(ctx, fmtTick ? fmtTick(t) : String(t), sx(t), stripY + stripH + 15, MUTED, "center", "10px " + FONT_MONO);
@@ -162,9 +175,17 @@
     ctx.beginPath(); ctx.moveTo(padL, curveBot + 0.5); ctx.lineTo(w - padR, curveBot + 0.5); ctx.stroke();
     ctx.beginPath(); ctx.moveTo(padL + 0.5, curveTop); ctx.lineTo(padL + 0.5, curveBot); ctx.stroke();
     drawTex(ctx, objLabel[0], objLabel[1], padL + 4, curveTop - 8, { color: MUTED, px: 10, align: "left", w });
-    ctx.beginPath();
-    vals.forEach(([z, v], i) => { i === 0 ? ctx.moveTo(sx(z), sy(v)) : ctx.lineTo(sx(z), sy(v)); });
-    ctx.strokeStyle = ACCENT; ctx.lineWidth = 2; ctx.stroke();
+    // objective: solid where feasible, faint elsewhere
+    const seg = (from, to, style, width) => {
+      ctx.beginPath(); let started = false;
+      vals.forEach(([z, v]) => { if (z < from - 1e-9 || z > to + 1e-9) return; started ? ctx.lineTo(sx(z), sy(v)) : ctx.moveTo(sx(z), sy(v)); started = true; });
+      ctx.strokeStyle = style; ctx.lineWidth = width; ctx.stroke();
+    };
+    seg(zMin, zMax, "rgba(36,66,90,0.28)", 1.4);
+    seg(bLo, bHi, ACCENT, 2);
+    ctx.setLineDash([3, 3]); ctx.strokeStyle = "rgba(36,66,90,0.45)"; ctx.lineWidth = 1;
+    [bLo, bHi].forEach((b) => { ctx.beginPath(); ctx.moveTo(sx(b), curveTop); ctx.lineTo(sx(b), curveBot); ctx.stroke(); });
+    ctx.setLineDash([]);
 
     // draggable candidate decision
     if (candidate !== undefined) {
@@ -184,16 +205,31 @@
     dot(ctx, sx(zStar), sy(vStar), 5.5, BRASS, BRASS_DARK);
     dot(ctx, sx(zStar), stripY + stripH / 2, 5.5, BRASS, BRASS_DARK);
     const iz = (px) => Math.min(zMax, Math.max(zMin, zMin + ((px - padL) / (w - padL - padR)) * (zMax - zMin)));
-    return { sx, sy, iz, stripY, stripH, curveTop, curveBot, padL, padR, candidateY: stripY + stripH / 2 };
+    return { sx, sy, iz, stripY, stripH, curveTop, curveBot, padL, padR, candidateY: stripY + stripH / 2, handleY, zMin, zMax };
   }
 
   // Shared interaction for the one-dimensional decision panels.
-  function hitTest1D(p, g, state) {
-    if (!state.candidate) return null;
-    const cx = g.sx(state.candidate[0]);
-    return Math.hypot(cx - p[0], g.candidateY - p[1]) <= 12 ? { type: "candidate" } : null;
+  function hitTest1D(problem, p, g, state) {
+    if (state.candidate) {
+      const cx = g.sx(problem.toScalar(state.candidate));
+      if (Math.hypot(cx - p[0], g.candidateY - p[1]) <= 12) return { type: "candidate" };
+    }
+    const [lo, hi] = problem.bounds;
+    if (Math.hypot(g.sx(hi) - p[0], g.handleY - p[1]) <= 10) return { type: "hi" };
+    if (Math.hypot(g.sx(lo) - p[0], g.handleY - p[1]) <= 10) return { type: "lo" };
+    return null;
   }
-  function drag1D(hit, p, g, state) { state.candidate = [g.iz(p[0])]; return "candidate"; }
+  function drag1D(problem, hit, p, g, state) {
+    const t = g.iz(p[0]);
+    if (hit.type === "candidate") { state.candidate = problem.fromScalar(clamp(t, problem.bounds[0], problem.bounds[1])); return "candidate"; }
+    const gap = (g.zMax - g.zMin) * 0.04;
+    if (hit.type === "lo") problem.bounds[0] = Math.min(t, problem.bounds[1] - gap);
+    else problem.bounds[1] = Math.max(t, problem.bounds[0] + gap);
+    problem.bounds[0] = Math.max(g.zMin, problem.bounds[0]); problem.bounds[1] = Math.min(g.zMax, problem.bounds[1]);
+    state.candidate = problem.fromScalar(clamp(problem.toScalar(state.candidate), problem.bounds[0], problem.bounds[1]));
+    return "recompute";
+  }
+  function clamp(v, lo, hi) { return Math.min(hi, Math.max(lo, v)); }
 
   /* ---------------- Problem: Linear programming ---------------- */
   // Feasible region Z = conv{v_1, ..., v_m} in the positive quadrant. The vertices
@@ -260,6 +296,7 @@
     updateHull() { LP.hullIdx = convexHull(LP.vertices); },
     hull() { return LP.hullIdx.map((i) => LP.vertices[i]); },
     setVertexCount(m) { LP.vertices = defaultVertices(m); LP.updateHull(); },
+    reset() { LP.setVertexCount(parseInt(els["ctrl-vertices"].value, 10) || 6); },
     solve(lambda) {
       const hull = LP.hull();
       let best = hull[0], bestVal = Infinity;
@@ -383,33 +420,41 @@
     axisLabels: [["\\text{demand } y", "demand y"]],
     pdf(a) { return (a >= 1 && a <= 3) ? 1 : 0; },
     sampleY(rng) { return { vec: [uniform(rng, 1, 3)] }; },
+    // feasible order quantities z in [z_min, z_max]; the limits are draggable
+    range: [0, 3.2],
+    bounds: [0, 3.2],
+    reset() { NEWS.bounds = [0, 3.2]; },
+    toScalar(z) { return z[0]; },
+    fromScalar(t) { return [t]; },
     // cost is decreasing in y, so the worst case in [mu-lambda, mu+lambda] is the low end
     robustObjective(z, lambda) { return NEWS.costOfDecision(z, { vec: [NEWS.mu[0] - lambda] }); },
     worstCase(lambda) { return [NEWS.mu[0] - lambda]; },
-    solve(lambda) { return [Math.max(NEWS.mu[0] - lambda, 0)]; },
+    solve(lambda) { return [clamp(NEWS.mu[0] - lambda, NEWS.bounds[0], NEWS.bounds[1])]; },
     costOfDecision(z, y) {
       const Y = y.vec[0], zz = z[0];
       return -NEWS.p * Math.min(Y, zz) + NEWS.c * zz - NEWS.v * Math.max(zz - Y, 0);
     },
-    oracleCost(y) { const Y = y.vec[0]; return (NEWS.c - NEWS.p) * Y; },
-    objectiveHTML: "\\[ \\min_{z\\ge 0}\\ \\max_{y\\in\\mathcal U_\\lambda}\\big[-p\\min(y,z)+cz-v(z-y)^+\\big],\\quad (p,c,v)=(4,2,0) \\]",
-    decisionSubtitle: "Worst-case cost as a function of the order quantity \\(z\\), minimised at \\(z^*_\\lambda=\\max(\\mu-\\lambda,0)\\). Drag the hollow marker to test a candidate \\(z\\).",
+    // with p > c the cost is minimised at z = y, clamped to the feasible interval
+    oracleCost(y) { return NEWS.costOfDecision([clamp(y.vec[0], NEWS.bounds[0], NEWS.bounds[1])], y); },
+    objectiveHTML: "\\[ \\min_{z_{\\min}\\le z\\le z_{\\max}}\\ \\max_{y\\in\\mathcal U_\\lambda}\\big[-p\\min(y,z)+cz-v(z-y)^+\\big],\\quad (p,c,v)=(4,2,0) \\]",
+    decisionSubtitle: "Worst-case cost as a function of the order quantity \\(z\\), minimised at \\(z^*_\\lambda\\) (\\(\\mu-\\lambda\\) clamped to the feasible interval). Drag the square grips to set \\(z_{\\min}, z_{\\max}\\), or the hollow marker to test a candidate \\(z\\).",
     formatZ(z) { return z[0].toFixed(2); },
-    defaultCandidate() { return [NEWS.mu[0]]; },
+    defaultCandidate() { return [clamp(NEWS.mu[0], NEWS.bounds[0], NEWS.bounds[1])]; },
     drawDecision(ctx, w, h, state) {
       ctx.clearRect(0, 0, w, h);
       const z = state.z[0];
       const g = draw1DDecision(ctx, w, h, {
-        zMin: 0, zMax: 3.2, objective: (zz) => NEWS.robustObjective([zz], state.lambda), zStar: z,
-        candidate: state.candidate ? state.candidate[0] : undefined,
+        zMin: NEWS.range[0], zMax: NEWS.range[1], objective: (zz) => NEWS.robustObjective([zz], state.lambda), zStar: z,
+        candidate: state.candidate ? state.candidate[0] : undefined, bounds: NEWS.bounds,
         xLabel: ["\\text{order quantity } z", "order quantity z"],
         objLabel: ["\\max_{y\\in\\mathcal U_\\lambda} f(y,z)", "worst-case cost"], ticks: [0, 1, 2, 3]
       });
       drawTex(ctx, "z^\\star_\\lambda = " + z.toFixed(2), "z*(λ) = " + z.toFixed(2), g.sx(z) + 8, g.stripY - 8, { color: BRASS_DARK, px: 11, align: "left", w, flip: g.sx(z) - 8, plate: true });
       return g;
     },
-    hitTest: hitTest1D, drag: drag1D,
-    legendHTML: '<span><i class="legend-grad"></i>worst-case cost (low &rarr; high) along \\(z\\)</span><span><i class="legend-dot lambda"></i>Order quantity \\(z^*_\\lambda\\)</span><span><i class="legend-dot candidate"></i>Candidate \\(z\\) (drag)</span>'
+    hitTest(p, g, st) { return hitTest1D(NEWS, p, g, st); },
+    drag(hit, p, g, st) { return drag1D(NEWS, hit, p, g, st); },
+    legendHTML: '<span><i class="legend-grad"></i>worst-case cost (low &rarr; high) along \\(z\\)</span><span><i class="legend-dot lambda"></i>Order quantity \\(z^*_\\lambda\\)</span><span><i class="legend-square"></i>Limits \\(z_{\\min}, z_{\\max}\\) (drag)</span><span><i class="legend-dot candidate"></i>Candidate \\(z\\) (drag)</span>'
   };
 
   /* ---------------- Problem: Portfolio selection ---------------- */
@@ -422,6 +467,12 @@
     axisLabels: [["\\text{return } y_1", "return y1"], ["\\text{return } y_2", "return y2"]],
     pdf(a, b) { return (a >= 1.15 && a <= 3.15 && b >= 0.85 && b <= 2.85) ? 1 : 0; },
     sampleY(rng) { return { vec: [uniform(rng, 1.15, 3.15), uniform(rng, 0.85, 2.85)] }; },
+    // position limits l <= z_1 <= u on the simplex; the limits are draggable
+    range: [0, 1],
+    bounds: [0, 1],
+    reset() { PORT.bounds = [0, 1]; },
+    toScalar(z) { return z[0]; },
+    fromScalar(t) { return [t, 1 - t]; },
     robustObjective(z, lambda) {
       const ret = PORT.mu[0] * z[0] + PORT.mu[1] * z[1];
       return -ret + lambda * (z[0] * z[0] + z[1] * z[1]) / 3;
@@ -429,26 +480,31 @@
     // cost -y^T z is maximised at the lowest returns in the box
     worstCase(lambda) { return [PORT.mu[0] - lambda, PORT.mu[1] - lambda]; },
     solve(lambda) {
-      let best = 0.5, bestVal = Infinity;
+      const [lo, hi] = PORT.bounds;
+      let best = lo, bestVal = Infinity;
       for (let i = 0; i <= 200; i++) {
-        const z1 = i / 200;
+        const z1 = lo + ((hi - lo) * i) / 200;
         const val = PORT.robustObjective([z1, 1 - z1], lambda);
         if (val < bestVal) { bestVal = val; best = z1; }
       }
       return [best, 1 - best];
     },
     costOfDecision(z, y) { return -(y.vec[0] * z[0] + y.vec[1] * z[1]); },
-    oracleCost(y) { return -Math.max(y.vec[0], y.vec[1]); },
-    objectiveHTML: "\\[ \\min_{z_1+z_2=1,\\ z\\ge0}\\ -\\mu^\\top z + \\lambda\\Big(\\tfrac{z_1^2+z_2^2}{3}\\Big),\\quad \\mu=(2.15,1.85) \\]",
-    decisionSubtitle: "Objective along the two-asset simplex \\(z_1\\in[0,1]\\); \\(z^*_\\lambda\\) is its minimiser. Drag the hollow marker to test a candidate split.",
+    // linear in z_1, so the feasible optimum sits at one of the two limits
+    oracleCost(y) {
+      const [lo, hi] = PORT.bounds;
+      return Math.min(PORT.costOfDecision([lo, 1 - lo], y), PORT.costOfDecision([hi, 1 - hi], y));
+    },
+    objectiveHTML: "\\[ \\min_{z_1+z_2=1,\\ \\ell\\le z_1\\le u}\\ -\\mu^\\top z + \\lambda\\Big(\\tfrac{z_1^2+z_2^2}{3}\\Big),\\quad \\mu=(2.15,1.85) \\]",
+    decisionSubtitle: "Objective along the two-asset simplex; \\(z^*_\\lambda\\) is its minimiser within the position limits \\(\\ell\\le z_1\\le u\\). Drag the square grips to set the limits, or the hollow marker to test a candidate split.",
     formatZ(z) { return "(" + z[0].toFixed(2) + ", " + z[1].toFixed(2) + ")"; },
-    defaultCandidate() { return [0.5, 0.5]; },
+    defaultCandidate() { const t = clamp(0.5, PORT.bounds[0], PORT.bounds[1]); return [t, 1 - t]; },
     drawDecision(ctx, w, h, state) {
       ctx.clearRect(0, 0, w, h);
       const z1 = state.z[0];
       const g = draw1DDecision(ctx, w, h, {
         zMin: 0, zMax: 1, objective: (t) => PORT.robustObjective([t, 1 - t], state.lambda), zStar: z1,
-        candidate: state.candidate ? state.candidate[0] : undefined,
+        candidate: state.candidate ? state.candidate[0] : undefined, bounds: PORT.bounds,
         xLabel: ["z_1 \\text{ (weight on asset 1)},\\quad z_2 = 1 - z_1", "z1 (weight on asset 1); z2 = 1 - z1"],
         objLabel: ["-\\mu^\\top z + \\lambda\\,\\|z\\|^2/3", "objective"],
         ticks: [0, 0.25, 0.5, 0.75, 1], fmtTick: (t) => t.toFixed(2)
@@ -457,31 +513,67 @@
         "z*(λ) = (" + z1.toFixed(2) + ", " + (1 - z1).toFixed(2) + ")", g.sx(z1) + 8, g.stripY - 8, { color: BRASS_DARK, px: 11, align: "left", w, flip: g.sx(z1) - 8, plate: true });
       return g;
     },
-    hitTest: hitTest1D,
-    drag(hit, p, g, state) { const t = g.iz(p[0]); state.candidate = [t, 1 - t]; return "candidate"; },
-    legendHTML: '<span><i class="legend-grad"></i>objective (low &rarr; high) along the simplex</span><span><i class="legend-dot lambda"></i>Weight split \\(z^*_\\lambda\\)</span><span><i class="legend-dot candidate"></i>Candidate \\(z\\) (drag)</span>'
+    hitTest(p, g, st) { return hitTest1D(PORT, p, g, st); },
+    drag(hit, p, g, st) { return drag1D(PORT, hit, p, g, st); },
+    legendHTML: '<span><i class="legend-grad"></i>objective (low &rarr; high) along the simplex</span><span><i class="legend-dot lambda"></i>Weight split \\(z^*_\\lambda\\)</span><span><i class="legend-square"></i>Position limits \\(\\ell, u\\) (drag)</span><span><i class="legend-dot candidate"></i>Candidate \\(z\\) (drag)</span>'
   };
 
   /* ---------------- Problem: Shortest path ---------------- */
-  const SP_EDGES = {
-    A: [[2.2, 2.8]],
-    B: [[0.9, 1.3], [0.9, 1.3]],
-    C: [[0.55, 0.85], [0.55, 0.85], [0.55, 0.85]]
-  };
+  // Three source-to-sink routes: A is one winding road (drag its bulge), B has
+  // one intermediate node, C has two. Each edge's mean cost is its drawn length
+  // (SP_PX_PER_UNIT pixels per cost unit) and its realised cost is uniform
+  // within +-SP_EDGE_HALF of that, so a path with more edges is more uncertain.
   const SP_NAMES = ["A", "B", "C"];
   const SP_W = [1, 2, 3];
+  const SP_PX_PER_UNIT = 120, SP_EDGE_HALF = 0.2;
+  const SP_SOURCE = [40, 150], SP_SINK = [320, 150];
   function tri(x, lo, hi) { const m = (lo + hi) / 2; return Math.max(0, 1 - Math.abs(x - m) / (m - lo)); }
+  function quadPoints(p0, c, p2, n) {
+    const pts = [];
+    for (let i = 0; i <= n; i++) {
+      const t = i / n, u = 1 - t;
+      pts.push([u * u * p0[0] + 2 * u * t * c[0] + t * t * p2[0], u * u * p0[1] + 2 * u * t * c[1] + t * t * p2[1]]);
+    }
+    return pts;
+  }
+  function polylineLength(pts) { let l = 0; for (let i = 1; i < pts.length; i++) l += Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]); return l; }
   const SP = {
     id: "shortestpath", label: "Shortest path",
-    lambdaMax: 0.5,
-    mu: [2.5, 2.2, 2.1],
+    lambdaMax: 3 * SP_EDGE_HALF,
+    mu: [0, 0, 0],
     dims: 3,
-    support: [[2.2, 2.8], [1.8, 2.6]],
+    support: [[0, 1], [0, 1]],
     axisLabels: [["\\text{cost of path } A", "cost of path A"], ["\\text{cost of path } B", "cost of path B"]],
-    // A is uniform; B is a sum of two uniforms (triangular)
-    pdf(a, b) { return ((a >= 2.2 && a <= 2.8) ? 1 : 0) * tri(b, 1.8, 2.6); },
+    // draggable geometry (canvas pixels): the midpoint of road A, B's node, C's two nodes
+    nodes: null,
+    reset() { SP.nodes = { aMid: [180, 250], b: [180, 95], c1: [130, 160], c2: [230, 160] }; SP.updateGeometry(); },
+    // control point of the quadratic road A that passes through aMid at t = 1/2
+    aControl() { const m = SP.nodes.aMid; return [2 * m[0] - (SP_SOURCE[0] + SP_SINK[0]) / 2, 2 * m[1] - (SP_SOURCE[1] + SP_SINK[1]) / 2]; },
+    aPolyline() { return quadPoints(SP_SOURCE, SP.aControl(), SP_SINK, 40); },
+    // per-path list of edge lengths, in cost units
+    edgeLengths() {
+      const n = SP.nodes, d = (p, q) => Math.hypot(p[0] - q[0], p[1] - q[1]) / SP_PX_PER_UNIT;
+      return [
+        [polylineLength(SP.aPolyline()) / SP_PX_PER_UNIT],
+        [d(SP_SOURCE, n.b), d(n.b, SP_SINK)],
+        [d(SP_SOURCE, n.c1), d(n.c1, n.c2), d(n.c2, SP_SINK)]
+      ];
+    },
+    updateGeometry() {
+      const L = SP.edgeLengths();
+      SP.mu = L.map((edges) => edges.reduce((a, b) => a + b, 0));
+      SP.support = [
+        [SP.mu[0] - SP_EDGE_HALF, SP.mu[0] + SP_EDGE_HALF],
+        [SP.mu[1] - 2 * SP_EDGE_HALF, SP.mu[1] + 2 * SP_EDGE_HALF]
+      ];
+    },
+    // A is one uniform edge; B is the sum of two equal-width uniforms (triangular)
+    pdf(a, b) {
+      const s = SP.support;
+      return ((a >= s[0][0] && a <= s[0][1]) ? 1 : 0) * tri(b, s[1][0], s[1][1]);
+    },
     sampleY(rng) {
-      const vec = SP_NAMES.map((k) => SP_EDGES[k].reduce((s, [lo, hi]) => s + uniform(rng, lo, hi), 0));
+      const vec = SP.edgeLengths().map((edges) => edges.reduce((sum, l) => sum + uniform(rng, l - SP_EDGE_HALF, l + SP_EDGE_HALF), 0));
       return { vec };
     },
     robustObjective(z, lambda) { return SP.mu[z[0]] + lambda * SP_W[z[0]]; },
@@ -497,55 +589,57 @@
     },
     costOfDecision(z, y) { return y.vec[z[0]]; },
     oracleCost(y) { return Math.min(...y.vec); },
-    objectiveHTML: "\\[ \\min_{i\\in\\{A,B,C\\}}\\ \\mu_i + \\lambda\\, w_i,\\quad w=(1,2,3)\\ \\text{edges per path} \\]",
-    decisionSubtitle: "Each path coloured by its robust objective \\(\\mu_i+\\lambda w_i\\); \\(z^*_\\lambda\\) is the cheapest. Click a path to test it as a candidate.",
+    objectiveHTML: "\\[ \\min_{i\\in\\{A,B,C\\}}\\ \\mu_i + \\lambda\\, w_i,\\qquad \\mu_i = \\text{length of path } i,\\quad w=(1,2,3)\\ \\text{edges per path},\\quad \\text{each edge } \\pm 0.2 \\]",
+    decisionSubtitle: "Each path coloured by its robust objective \\(\\mu_i+\\lambda w_i\\); \\(z^*_\\lambda\\) is the cheapest. Drag the grey nodes (or the bulge of road A) to change the path lengths; click a path to test it as a candidate.",
     formatZ(z) { return "path " + SP_NAMES[z[0]]; },
     defaultCandidate() { return SP.solve(0); },
     drawDecision(ctx, w, h, state) {
       ctx.clearRect(0, 0, w, h);
-      const nodes = {
-        0: [34, h / 2], 1: [w * 0.42, h * 0.2], 2: [w * 0.42, h * 0.8],
-        3: [w * 0.7, h * 0.8], 4: [w - 34, h / 2]
-      };
-      const edges = [
-        { from: 0, to: 4, path: 0 },
-        { from: 0, to: 1, path: 1 }, { from: 1, to: 4, path: 1 },
-        { from: 0, to: 2, path: 2 }, { from: 2, to: 3, path: 2 }, { from: 3, to: 4, path: 2 }
-      ];
+      const n = SP.nodes;
       const chosen = state.z[0];
+      const cand = state.candidate ? state.candidate[0] : -1;
       const objs = SP_NAMES.map((_, i) => SP.robustObjective([i], state.lambda));
       const lo = Math.min(...objs), hi = Math.max(...objs), span = hi - lo || 1;
       const colorOf = (i) => rampColor(0.7 * (objs[i] - lo) / span);
-
-      const cand = state.candidate ? state.candidate[0] : -1;
-      edges.forEach((e) => {
-        const [x1, y1] = nodes[e.from], [x2, y2] = nodes[e.to];
-        if (e.path === cand) {
-          ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2);
-          ctx.strokeStyle = PREF; ctx.lineWidth = 7; ctx.lineCap = "round"; ctx.setLineDash([0.5, 9]); ctx.stroke(); ctx.setLineDash([]);
+      const routes = [
+        { path: 0, pts: SP.aPolyline() },
+        { path: 1, pts: [SP_SOURCE, n.b, SP_SINK] },
+        { path: 2, pts: [SP_SOURCE, n.c1, n.c2, SP_SINK] }
+      ];
+      const trace = (pts) => { ctx.beginPath(); pts.forEach((q, i) => (i === 0 ? ctx.moveTo(q[0], q[1]) : ctx.lineTo(q[0], q[1]))); };
+      routes.forEach((r) => {
+        ctx.lineCap = "round"; ctx.lineJoin = "round";
+        if (r.path === cand) {
+          trace(r.pts); ctx.strokeStyle = PREF; ctx.lineWidth = 7; ctx.setLineDash([0.5, 9]); ctx.stroke(); ctx.setLineDash([]);
         }
-        if (e.path === chosen) {
-          ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2);
-          ctx.strokeStyle = "rgba(176,127,49,0.45)"; ctx.lineWidth = 11; ctx.lineCap = "round"; ctx.stroke();
-        }
-        ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2);
-        ctx.strokeStyle = colorOf(e.path); ctx.lineWidth = e.path === chosen ? 4 : 3; ctx.lineCap = "round"; ctx.stroke();
+        if (r.path === chosen) { trace(r.pts); ctx.strokeStyle = "rgba(176,127,49,0.45)"; ctx.lineWidth = 11; ctx.stroke(); }
+        trace(r.pts); ctx.strokeStyle = colorOf(r.path); ctx.lineWidth = r.path === chosen ? 4 : 3; ctx.stroke();
       });
-      Object.entries(nodes).forEach(([k, [x, y]]) => {
-        dot(ctx, x, y, 5, (k === "0" || k === "4") ? ACCENT : "#8a9990");
-      });
-      label(ctx, "source", nodes[0][0], nodes[0][1] - 12);
-      label(ctx, "sink", nodes[4][0], nodes[4][1] - 12);
-      // objective value per path
-      const mids = [[w / 2, h / 2 - 10], [w * 0.42, h * 0.2 - 12], [w * 0.56, h * 0.8 + 18]];
+      // fixed terminals and draggable nodes
+      dot(ctx, SP_SOURCE[0], SP_SOURCE[1], 5, ACCENT);
+      dot(ctx, SP_SINK[0], SP_SINK[1], 5, ACCENT);
+      [n.b, n.c1, n.c2].forEach((q) => dot(ctx, q[0], q[1], 6, "#8a9990", "#fbfbf7"));
+      // grip for road A: a square at its midpoint
+      ctx.fillStyle = "#fbfbf7"; ctx.strokeStyle = ACCENT; ctx.lineWidth = 1.6;
+      ctx.beginPath(); ctx.rect(n.aMid[0] - 4.5, n.aMid[1] - 4.5, 9, 9); ctx.fill(); ctx.stroke();
+      label(ctx, "source", SP_SOURCE[0], SP_SOURCE[1] - 12);
+      label(ctx, "sink", SP_SINK[0], SP_SINK[1] - 12);
+      // objective value per path, next to each route
+      const mids = [[n.aMid[0], n.aMid[1] + 20], [n.b[0], n.b[1] - 12], [(n.c1[0] + n.c2[0]) / 2, Math.max(n.c1[1], n.c2[1]) + 20]];
       SP_NAMES.forEach((name, i) => {
         const tex = "\\mu_" + name + "+\\lambda w_" + name + " = " + objs[i].toFixed(2) + (i === chosen ? "\\ \\leftarrow z^\\star_\\lambda" : "");
         const txt = name + ": " + objs[i].toFixed(2) + (i === chosen ? "  <- z*" : "");
-        drawTex(ctx, tex, txt, mids[i][0], mids[i][1], { color: i === chosen ? BRASS_DARK : MUTED, px: 11, align: "center", bold: i === chosen, w });
+        drawTex(ctx, tex, txt, mids[i][0], mids[i][1], { color: i === chosen ? BRASS_DARK : MUTED, px: 11, align: "center", bold: i === chosen, w, plate: true });
       });
-      return { segments: edges.map((e) => ({ a: nodes[e.from], b: nodes[e.to], path: e.path })) };
+      const segments = [];
+      routes.forEach((r) => { for (let i = 1; i < r.pts.length; i++) segments.push({ a: r.pts[i - 1], b: r.pts[i], path: r.path }); });
+      return { segments };
     },
     hitTest(p, g) {
+      const n = SP.nodes;
+      const near = (q, r) => Math.hypot(q[0] - p[0], q[1] - p[1]) <= r;
+      if (near(n.aMid, 10)) return { type: "node", key: "aMid" };
+      for (const key of ["b", "c1", "c2"]) if (near(n[key], 10)) return { type: "node", key };
       let best = null, bestD = 10;
       g.segments.forEach((sg) => {
         const q = nearestOnSegment(p, sg.a, sg.b);
@@ -555,12 +649,18 @@
       return best;
     },
     drag(hit, p, g, state) {
+      if (hit.type === "node") {
+        SP.nodes[hit.key] = [clamp(p[0], 20, CANVAS_W - 20), clamp(p[1], 24, CANVAS_H - 24)];
+        SP.updateGeometry();
+        return "recompute";
+      }
       const h2 = SP.hitTest(p, g);
-      state.candidate = [h2 ? h2.path : hit.path];
+      state.candidate = [h2 && h2.type === "candidate" ? h2.path : hit.path];
       return "candidate";
     },
-    legendHTML: '<span><i class="legend-grad"></i>objective \\(\\mu_i+\\lambda w_i\\) (low &rarr; high)</span><span><i class="legend-dot lambda"></i>Selected path \\(z^*_\\lambda\\)</span><span><i class="legend-dot candidate"></i>Candidate path (click)</span><span>&nbsp;A = 1 edge &middot; B = 2 edges &middot; C = 3 edges</span>'
+    legendHTML: '<span><i class="legend-grad"></i>objective \\(\\mu_i+\\lambda w_i\\) (low &rarr; high)</span><span><i class="legend-dot lambda"></i>Selected path \\(z^*_\\lambda\\)</span><span><i class="legend-dot node"></i>Node (drag)</span><span><i class="legend-square"></i>Bulge of road A (drag)</span><span><i class="legend-dot candidate"></i>Candidate path (click)</span>'
   };
+  SP.reset();
 
   const PROBLEMS = { lp: LP, newsvendor: NEWS, portfolio: PORT, shortestpath: SP };
 
@@ -649,7 +749,7 @@
       "ctrl-pref", "ctrl-pref-value", "btn-select", "btn-resample", "decision-canvas", "outcome-canvas",
       "frontier-svg", "stat-alpha-i", "stat-alpha-r", "stat-epsilon", "stat-post-ai", "stat-post-ar", "stat-pre-ai", "stat-pre-ar",
       "stat-lambda-hat", "demo-objective", "decision-heading", "decision-subtitle", "decision-legend",
-      "outcome-subtitle", "ro-z", "ro-obj", "ro-obj-star", "ro-reg", "ro-reg-star", "lp-tools", "ctrl-vertices", "btn-reset-z"].forEach((id) => { els[id] = document.getElementById(id); });
+      "outcome-subtitle", "ro-z", "ro-obj", "ro-obj-star", "ro-reg", "ro-reg-star", "lp-vertex-ctl", "ctrl-vertices", "btn-reset-z"].forEach((id) => { els[id] = document.getElementById(id); });
   }
 
   function currentProblem() { return PROBLEMS[state.problemId]; }
@@ -890,7 +990,8 @@
     drawTex(ctx, "\\mu", "μ", muX + 6, muY - 6, { color: ACCENT, px: 12, align: "left", bold: true, w });
     const yx = g.sx(ystar[0]), yy = twoD ? g.sy(ystar[1]) : y0;
     diamond(ctx, yx, yy, 6.5, RISK, "#fbfbf7");
-    drawTex(ctx, "y^\\star", "y*", yx + 8, yy + 4, { color: RISK, px: 12, align: "left", bold: true, w });
+    const overlapsMu = Math.hypot(yx - muX, yy - muY) < 4; // e.g. shortest path when y* only moves a hidden coordinate
+    drawTex(ctx, "y^\\star", "y*", yx + 8, yy + (overlapsMu ? 15 : 4), { color: RISK, px: 12, align: "left", bold: true, w });
   }
 
   function renderFrontier() {
@@ -1048,7 +1149,7 @@
     });
     renderObjective();
     state.densityLayer = null;
-    els["lp-tools"].hidden = id !== "lp";
+    els["lp-vertex-ctl"].hidden = id !== "lp";
     recomputeReference();
     recomputeCalibration();
     renderAll(2);
@@ -1067,7 +1168,7 @@
     if (interactiveTimer) return;
     interactiveTimer = setTimeout(() => {
       interactiveTimer = null;
-      if (needsRecompute) { needsRecompute = false; recomputeReference(); recomputeCalibration(); renderAll(); }
+      if (needsRecompute) { needsRecompute = false; state.densityLayer = null; recomputeReference(); recomputeCalibration(); renderAll(); }
       else renderDecision();
     }, 0);
   }
@@ -1090,7 +1191,7 @@
       const r = hitAt(e);
       if (!r || !r.hit) return;
       e.preventDefault();
-      canvas.setPointerCapture(e.pointerId);
+      try { canvas.setPointerCapture(e.pointerId); } catch (err) { /* keep dragging without capture */ }
       state.drag = r.hit;
       canvas.style.cursor = "grabbing";
       applyDrag(e);
@@ -1111,8 +1212,10 @@
       recomputeReference(); recomputeCalibration(); renderAll();
     });
     els["btn-reset-z"].addEventListener("click", () => {
-      LP.setVertexCount(parseInt(els["ctrl-vertices"].value, 10));
-      state.candidate.lp = null;
+      const problem = currentProblem();
+      problem.reset();
+      state.candidate[problem.id] = null;
+      state.densityLayer = null;
       recomputeReference(); recomputeCalibration(); renderAll();
     });
   }
