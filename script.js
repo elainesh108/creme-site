@@ -54,9 +54,81 @@
     label(ctx, text, left, y, color, "left", font);
   }
 
+  /* ---------------- LaTeX labels on canvas / SVG ----------------
+     MathJax (SVG output, fontCache "none") renders a TeX string to a
+     self-contained <svg>; we draw it into the canvases as an image and embed
+     it directly inside the frontier SVG. Until MathJax is ready, or while an
+     image is still decoding, a plain-text fallback is drawn instead. */
+  let texReady = false;
+  const texCache = new Map();
+  let rerenderQueued = false;
+  function queueRerender() {
+    if (rerenderQueued) return;
+    rerenderQueued = true;
+    // setTimeout rather than requestAnimationFrame: the latter stalls in background tabs
+    setTimeout(() => { rerenderQueued = false; renderAll(); }, 0);
+  }
+  function texSvg(tex, color, px) {
+    if (!texReady) return null;
+    let svg;
+    try { svg = MathJax.tex2svg(tex, { display: false }).querySelector("svg"); } catch (e) { return null; }
+    if (!svg) return null;
+    const ex = px * 0.45; // MathJax sizes its output in ex units
+    const w = parseFloat(svg.getAttribute("width")) * ex, h = parseFloat(svg.getAttribute("height")) * ex;
+    const vaMatch = (svg.getAttribute("style") || "").match(/vertical-align:\s*(-?[\d.]+)ex/);
+    const va = (vaMatch ? parseFloat(vaMatch[1]) : 0) * ex; // bottom of the box relative to the baseline
+    svg.setAttribute("width", w.toFixed(2)); svg.setAttribute("height", h.toFixed(2));
+    svg.setAttribute("xmlns", "http://www.w3.org/2000/svg");
+    svg.setAttribute("xmlns:xlink", "http://www.w3.org/1999/xlink");
+    svg.removeAttribute("style");
+    const xml = new XMLSerializer().serializeToString(svg).split("currentColor").join(color);
+    return { xml, w, h, baseline: h + va };
+  }
+  function texImage(tex, color, px) {
+    const key = tex + "|" + color + "|" + px;
+    let entry = texCache.get(key);
+    if (entry) return entry;
+    const r = texSvg(tex, color, px);
+    if (!r) return null;
+    entry = { img: new Image(), w: r.w, h: r.h, baseline: r.baseline, ready: false };
+    entry.img.onload = () => { entry.ready = true; queueRerender(); };
+    entry.img.src = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(r.xml);
+    texCache.set(key, entry);
+    return entry;
+  }
+  // Draw TeX with its baseline at y. `w` (canvas width) enables horizontal clamping.
+  function drawTex(ctx, tex, fallback, x, y, opts) {
+    const o = opts || {};
+    const color = o.color || INK, px = o.px || 11, align = o.align || "left", w = o.w;
+    const entry = texImage(tex, color, px);
+    if (!entry || !entry.ready) {
+      const font = (o.bold ? "600 " : "") + px + "px " + FONT_UI;
+      if (w) labelClamped(ctx, fallback, x, y, color, align, font, w); else label(ctx, fallback, x, y, color, align, font);
+      return;
+    }
+    let left = align === "right" ? x - entry.w : align === "center" ? x - entry.w / 2 : x;
+    if (w && o.flip !== undefined && left + entry.w > w - 4) left = o.flip - entry.w; // mirror to the other side of the anchor
+    if (w) left = Math.max(4, Math.min(w - 4 - entry.w, left));
+    ctx.drawImage(entry.img, left, y - entry.baseline, entry.w, entry.h);
+  }
+  // Same for the SVG frontier: returns markup for a nested <svg> (or a <text> fallback).
+  function texMarkup(tex, fallback, x, y, opts) {
+    const o = opts || {};
+    const color = o.color || INK, px = o.px || 10, anchor = o.anchor || "start", rotate = o.rotate || 0;
+    const r = texSvg(tex, color, px);
+    let inner;
+    if (!r) {
+      inner = `<text x="${x}" y="${y}" text-anchor="${anchor}" font-family="IBM Plex Sans" font-size="${px}" fill="${color}">${fallback}</text>`;
+    } else {
+      const left = anchor === "end" ? x - r.w : anchor === "middle" ? x - r.w / 2 : x;
+      inner = r.xml.replace("<svg ", `<svg x="${left.toFixed(1)}" y="${(y - r.baseline).toFixed(1)}" `);
+    }
+    return rotate ? `<g transform="rotate(${rotate} ${x} ${y})">${inner}</g>` : inner;
+  }
+
   /* One-dimensional decision space: objective curve + gradient strip + minimiser. */
   function draw1DDecision(ctx, w, h, opts) {
-    const { zMin, zMax, objective, zStar, xLabel, ticks, fmtTick } = opts;
+    const { zMin, zMax, objective, zStar, xLabel, objLabel, ticks, fmtTick } = opts;
     const padL = 36, padR = 22, curveTop = 30, curveBot = 172, stripY = 206, stripH = 26;
     const sx = (z) => padL + ((z - zMin) / (zMax - zMin)) * (w - padL - padR);
     const N = 240, vals = [];
@@ -77,13 +149,13 @@
       ctx.beginPath(); ctx.moveTo(sx(t), stripY + stripH); ctx.lineTo(sx(t), stripY + stripH + 4); ctx.stroke();
       label(ctx, fmtTick ? fmtTick(t) : String(t), sx(t), stripY + stripH + 15, MUTED, "center", "10px " + FONT_MONO);
     });
-    label(ctx, xLabel, (sx(zMin) + sx(zMax)) / 2, h - 8, MUTED);
+    drawTex(ctx, xLabel[0], xLabel[1], (sx(zMin) + sx(zMax)) / 2, h - 8, { color: MUTED, px: 10, align: "center", w });
 
     // objective curve
     ctx.strokeStyle = "rgba(87,102,106,0.35)"; ctx.lineWidth = 1;
     ctx.beginPath(); ctx.moveTo(padL, curveBot + 0.5); ctx.lineTo(w - padR, curveBot + 0.5); ctx.stroke();
     ctx.beginPath(); ctx.moveTo(padL + 0.5, curveTop); ctx.lineTo(padL + 0.5, curveBot); ctx.stroke();
-    label(ctx, "objective", padL + 4, curveTop - 8, MUTED, "left");
+    drawTex(ctx, objLabel[0], objLabel[1], padL + 4, curveTop - 8, { color: MUTED, px: 10, align: "left", w });
     ctx.beginPath();
     vals.forEach(([z, v], i) => { i === 0 ? ctx.moveTo(sx(z), sy(v)) : ctx.lineTo(sx(z), sy(v)); });
     ctx.strokeStyle = ACCENT; ctx.lineWidth = 2; ctx.stroke();
@@ -141,7 +213,7 @@
     mu: [-1.1, -1],
     dims: 2,
     support: [[-2.1, -0.1], [-2, 0]],
-    axisLabels: ["y₁", "y₂"],
+    axisLabels: [["y_1", "y1"], ["y_2", "y2"]],
     pdf(a, b) { return (a >= -2.1 && a <= -0.1 && b >= -2 && b <= 0) ? 1 : 0; },
     sampleY(rng) { return { vec: [uniform(rng, -2.1, -0.1), uniform(rng, -2, 0)] }; },
     // worst case of y^T z over the box mu +- lambda, for z >= 0
@@ -205,12 +277,13 @@
         label(ctx, String(t), sx(t), h - padB + 14, MUTED, "center", "10px " + FONT_MONO);
         label(ctx, String(t), padL - 6, sy(t) + 3, MUTED, "right", "10px " + FONT_MONO);
       });
-      label(ctx, "z₁", w - padR, h - padB + 14, MUTED, "right");
-      label(ctx, "z₂", padL + 8, padT + 4, MUTED, "left");
+      drawTex(ctx, "z_1", "z1", w - padR, h - padB + 14, { color: MUTED, px: 10, align: "right" });
+      drawTex(ctx, "z_2", "z2", padL + 8, padT + 6, { color: MUTED, px: 10, align: "left" });
 
       const z = state.z;
       dot(ctx, sx(z[0]), sy(z[1]), 6, BRASS, BRASS_DARK);
-      labelClamped(ctx, "z*(λ) = (" + z[0].toFixed(2) + ", " + z[1].toFixed(2) + ")", sx(z[0]) + 9, sy(z[1]) - 9, BRASS_DARK, "left", "11px " + FONT_UI, w);
+      drawTex(ctx, "z^\\star_\\lambda=(" + z[0].toFixed(2) + ",\\," + z[1].toFixed(2) + ")", "z*(λ) = (" + z[0].toFixed(2) + ", " + z[1].toFixed(2) + ")",
+        sx(z[0]) + 9, sy(z[1]) - 9, { color: BRASS_DARK, px: 11, align: "left", w, flip: sx(z[0]) - 9 });
     },
     legendHTML: '<span><i class="legend-grad"></i>objective (low &rarr; high) on \\(\\mathcal Z\\)</span><span><i class="legend-dot lambda"></i>Robust decision \\(z^*_\\lambda\\)</span>'
   };
@@ -223,7 +296,7 @@
     dims: 1,
     p: 4, c: 2, v: 0,
     support: [[1, 3]],
-    axisLabels: ["demand y"],
+    axisLabels: [["\\text{demand } y", "demand y"]],
     pdf(a) { return (a >= 1 && a <= 3) ? 1 : 0; },
     sampleY(rng) { return { vec: [uniform(rng, 1, 3)] }; },
     // cost is decreasing in y, so the worst case in [mu-lambda, mu+lambda] is the low end
@@ -242,9 +315,10 @@
       const z = state.z[0];
       const g = draw1DDecision(ctx, w, h, {
         zMin: 0, zMax: 3.2, objective: (zz) => NEWS.robustObjective([zz], state.lambda), zStar: z,
-        xLabel: "order quantity z", ticks: [0, 1, 2, 3]
+        xLabel: ["\\text{order quantity } z", "order quantity z"],
+        objLabel: ["\\max_{y\\in\\mathcal U_\\lambda} f(y,z)", "worst-case cost"], ticks: [0, 1, 2, 3]
       });
-      labelClamped(ctx, "z*(λ) = " + z.toFixed(2), g.sx(z) + 8, g.stripY - 8, BRASS_DARK, "left", "11px " + FONT_UI, w);
+      drawTex(ctx, "z^\\star_\\lambda = " + z.toFixed(2), "z*(λ) = " + z.toFixed(2), g.sx(z) + 8, g.stripY - 8, { color: BRASS_DARK, px: 11, align: "left", w, flip: g.sx(z) - 8 });
     },
     legendHTML: '<span><i class="legend-grad"></i>worst-case cost (low &rarr; high) along \\(z\\)</span><span><i class="legend-dot lambda"></i>Order quantity \\(z^*_\\lambda\\)</span>'
   };
@@ -256,7 +330,7 @@
     mu: [2.15, 1.85],
     dims: 2,
     support: [[1.15, 3.15], [0.85, 2.85]],
-    axisLabels: ["return y₁", "return y₂"],
+    axisLabels: [["\\text{return } y_1", "return y1"], ["\\text{return } y_2", "return y2"]],
     pdf(a, b) { return (a >= 1.15 && a <= 3.15 && b >= 0.85 && b <= 2.85) ? 1 : 0; },
     sampleY(rng) { return { vec: [uniform(rng, 1.15, 3.15), uniform(rng, 0.85, 2.85)] }; },
     robustObjective(z, lambda) {
@@ -283,10 +357,12 @@
       const z1 = state.z[0];
       const g = draw1DDecision(ctx, w, h, {
         zMin: 0, zMax: 1, objective: (t) => PORT.robustObjective([t, 1 - t], state.lambda), zStar: z1,
-        xLabel: "z₁ (weight on asset 1); z₂ = 1 − z₁", ticks: [0, 0.25, 0.5, 0.75, 1], fmtTick: (t) => t.toFixed(2)
+        xLabel: ["z_1 \\text{ (weight on asset 1)},\\quad z_2 = 1 - z_1", "z1 (weight on asset 1); z2 = 1 - z1"],
+        objLabel: ["-\\mu^\\top z + \\lambda\\,\\|z\\|^2/3", "objective"],
+        ticks: [0, 0.25, 0.5, 0.75, 1], fmtTick: (t) => t.toFixed(2)
       });
-      labelClamped(ctx, "z*(λ): asset 1 " + (z1 * 100).toFixed(0) + "% · asset 2 " + ((1 - z1) * 100).toFixed(0) + "%",
-        g.sx(z1) + 8, g.stripY - 8, BRASS_DARK, "left", "11px " + FONT_UI, w);
+      drawTex(ctx, "z^\\star_\\lambda=(" + z1.toFixed(2) + ",\\," + (1 - z1).toFixed(2) + ")",
+        "z*(λ) = (" + z1.toFixed(2) + ", " + (1 - z1).toFixed(2) + ")", g.sx(z1) + 8, g.stripY - 8, { color: BRASS_DARK, px: 11, align: "left", w, flip: g.sx(z1) - 8 });
     },
     legendHTML: '<span><i class="legend-grad"></i>objective (low &rarr; high) along the simplex</span><span><i class="legend-dot lambda"></i>Weight split \\(z^*_\\lambda\\)</span>'
   };
@@ -306,7 +382,7 @@
     mu: [2.5, 2.2, 2.1],
     dims: 3,
     support: [[2.2, 2.8], [1.8, 2.6]],
-    axisLabels: ["cost of path A", "cost of path B"],
+    axisLabels: [["\\text{cost of path } A", "cost of path A"], ["\\text{cost of path } B", "cost of path B"]],
     // A is uniform; B is a sum of two uniforms (triangular)
     pdf(a, b) { return ((a >= 2.2 && a <= 2.8) ? 1 : 0) * tri(b, 1.8, 2.6); },
     sampleY(rng) {
@@ -361,8 +437,9 @@
       // objective value per path
       const mids = [[w / 2, h / 2 - 10], [w * 0.42, h * 0.2 - 12], [w * 0.56, h * 0.8 + 18]];
       SP_NAMES.forEach((name, i) => {
-        const txt = name + ": " + objs[i].toFixed(2) + (i === chosen ? "  ← z*(λ)" : "");
-        label(ctx, txt, mids[i][0], mids[i][1], i === chosen ? BRASS_DARK : MUTED, "center", (i === chosen ? "600 " : "") + "11px " + FONT_UI);
+        const tex = "\\mu_" + name + "+\\lambda w_" + name + " = " + objs[i].toFixed(2) + (i === chosen ? "\\ \\leftarrow z^\\star_\\lambda" : "");
+        const txt = name + ": " + objs[i].toFixed(2) + (i === chosen ? "  <- z*" : "");
+        drawTex(ctx, tex, txt, mids[i][0], mids[i][1], { color: i === chosen ? BRASS_DARK : MUTED, px: 11, align: "center", bold: i === chosen, w });
       });
     },
     legendHTML: '<span><i class="legend-grad"></i>objective \\(\\mu_i+\\lambda w_i\\) (low &rarr; high)</span><span><i class="legend-dot lambda"></i>Selected path \\(z^*_\\lambda\\)</span><span>&nbsp;A = 1 edge &middot; B = 2 edges &middot; C = 3 edges</span>'
@@ -450,7 +527,7 @@
   function cacheEls() {
     ["ctrl-lambda", "ctrl-lambda-value", "ctrl-n", "ctrl-n-value", "ctrl-delta", "ctrl-delta-value",
       "ctrl-pref", "ctrl-pref-value", "btn-select", "btn-resample", "decision-canvas", "outcome-canvas",
-      "frontier-svg", "stat-alpha-i", "stat-alpha-r", "stat-epsilon", "stat-posthoc", "stat-posthoc-sub",
+      "frontier-svg", "stat-alpha-i", "stat-alpha-r", "stat-epsilon", "stat-post-ai", "stat-post-ar", "stat-pre-ai", "stat-pre-ar",
       "stat-lambda-hat", "demo-objective", "decision-heading", "decision-subtitle", "decision-legend",
       "outcome-subtitle"].forEach((id) => { els[id] = document.getElementById(id); });
   }
@@ -533,12 +610,19 @@
     }
   }
 
+  const CANVAS_W = 360, CANVAS_H = 300, DPR = 2;
+  function canvasContext(canvas) {
+    if (canvas.width !== CANVAS_W * DPR) { canvas.width = CANVAS_W * DPR; canvas.height = CANVAS_H * DPR; }
+    const ctx = canvas.getContext("2d");
+    ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+    return ctx;
+  }
+
   function renderDecision() {
     const problem = currentProblem();
-    const canvas = els["decision-canvas"];
-    const ctx = canvas.getContext("2d");
+    const ctx = canvasContext(els["decision-canvas"]);
     const z = problem.solve(state.lambda);
-    problem.drawDecision(ctx, canvas.width, canvas.height, { z, lambda: state.lambda });
+    problem.drawDecision(ctx, CANVAS_W, CANVAS_H, { z, lambda: state.lambda });
   }
 
   function outcomeGeometry(problem, w, h) {
@@ -596,9 +680,8 @@
 
   function renderOutcome() {
     const problem = currentProblem();
-    const canvas = els["outcome-canvas"];
-    const ctx = canvas.getContext("2d");
-    const w = canvas.width, h = canvas.height;
+    const ctx = canvasContext(els["outcome-canvas"]);
+    const w = CANVAS_W, h = CANVAS_H;
     ctx.clearRect(0, 0, w, h);
     const g = outcomeGeometry(problem, w, h);
     const mu = problem.mu, lambda = state.lambda, twoD = problem.dims > 1;
@@ -642,9 +725,9 @@
         ctx.beginPath(); ctx.moveTo(g.padL - 4, g.sy(t)); ctx.lineTo(g.padL, g.sy(t)); ctx.stroke();
         label(ctx, String(t), g.padL - 6, g.sy(t) + 3, MUTED, "right", "10px " + FONT_MONO);
       });
-      label(ctx, problem.axisLabels[1], g.padL + 6, g.padT + 4, MUTED, "left");
+      drawTex(ctx, problem.axisLabels[1][0], problem.axisLabels[1][1], g.padL + 6, g.padT + 6, { color: MUTED, px: 10, align: "left", w });
     }
-    label(ctx, problem.axisLabels[0], w - g.padR, axisY + 28, MUTED, "right");
+    drawTex(ctx, problem.axisLabels[0][0], problem.axisLabels[0][1], w - g.padR, axisY + 28, { color: MUTED, px: 10, align: "right", w });
 
     // samples: filled = D1 (frontier), hollow = D2 (recalibration)
     const jitter = (i) => ((i * 37) % 21) - 10;
@@ -667,10 +750,10 @@
     const ystar = problem.worstCase(lambda, z);
     const muX = g.sx(mu[0]), muY = twoD ? g.sy(mu[1]) : y0;
     dot(ctx, muX, muY, 3.5, ACCENT, "#fbfbf7");
-    label(ctx, "μ", muX + 6, muY - 6, ACCENT, "left", "600 11px " + FONT_UI);
+    drawTex(ctx, "\\mu", "μ", muX + 6, muY - 6, { color: ACCENT, px: 12, align: "left", bold: true, w });
     const yx = g.sx(ystar[0]), yy = twoD ? g.sy(ystar[1]) : y0;
     diamond(ctx, yx, yy, 6.5, RISK, "#fbfbf7");
-    label(ctx, "y*", yx + 8, yy + 4, RISK, "left", "600 11px " + FONT_UI);
+    drawTex(ctx, "y^\\star", "y*", yx + 8, yy + 4, { color: RISK, px: 12, align: "left", bold: true, w });
   }
 
   function renderFrontier() {
@@ -698,8 +781,8 @@
       parts.push(`<line x1="${padL - 4}" y1="${fmt(sy(v))}" x2="${padL}" y2="${fmt(sy(v))}" stroke="${MUTED}" stroke-width="1"/>`);
       parts.push(`<text x="${padL - 6}" y="${fmt(sy(v) + 3)}" text-anchor="end" font-family="IBM Plex Mono" font-size="9" fill="${MUTED}">${v.toFixed(2)}</text>`);
     });
-    parts.push(`<text x="${(w + padL) / 2}" y="${h - 8}" text-anchor="middle" font-family="IBM Plex Mono" font-size="9" fill="${MUTED}">miscoverage α&#770;ᵢ(λ)</text>`);
-    parts.push(`<text x="12" y="${(h - padB) / 2}" text-anchor="middle" font-family="IBM Plex Mono" font-size="9" fill="${MUTED}" transform="rotate(-90 12 ${(h - padB) / 2})">regret α&#770;ᵣ(λ)</text>`);
+    parts.push(texMarkup("\\text{miscoverage } \\hat\\alpha_I(\\lambda)", "miscoverage αI(λ)", (w + padL) / 2, h - 6, { color: MUTED, px: 10, anchor: "middle" }));
+    parts.push(texMarkup("\\text{regret } \\hat\\alpha_R(\\lambda)", "regret αR(λ)", 14, (h - padB) / 2, { color: MUTED, px: 10, anchor: "middle", rotate: -90 }));
 
     // curves
     parts.push(`<path d="${pathFor(state.trueCurve)}" fill="none" stroke="#9aa79a" stroke-width="1.6" stroke-dasharray="4 3"/>`);
@@ -724,7 +807,15 @@
     if (sel) {
       parts.push(`<circle cx="${fmt(sx(sel.pre.aI))}" cy="${fmt(sy(sel.pre.aR))}" r="5" fill="#fbfbf7" stroke="${PREF}" stroke-width="1.8"/>`);
       parts.push(`<circle cx="${fmt(sx(sel.post.aI))}" cy="${fmt(sy(sel.post.aR))}" r="5" fill="${SAFE}" stroke="${SAFE_DARK}" stroke-width="1.2"/>`);
-      parts.push(`<text x="${fmt(sx(sel.pre.aI) + 8)}" y="${fmt(sy(sel.pre.aR) - 8)}" font-family="IBM Plex Sans" font-size="10" font-weight="600" fill="${PREF}">λ&#770; = ${sel.lambda.toFixed(2)}</text>`);
+      const lt = "\\hat\\lambda = " + sel.lambda.toFixed(2), lf = "λ^ = " + sel.lambda.toFixed(2);
+      const box = texSvg(lt, PREF, 11) || { w: 6 * lf.length, h: 12, baseline: 10 };
+      const px0 = sx(sel.pre.aI), py0 = sy(sel.pre.aR);
+      // above-right of the marker, or above-left near the right edge; a translucent
+      // plate keeps it legible where the tangent or the recalibration link pass under it
+      const lx = px0 + 10 + box.w > w - padR ? px0 - 10 - box.w : px0 + 10;
+      const ly = py0 - 10;
+      parts.push(`<rect x="${fmt(lx - 3)}" y="${fmt(ly - box.baseline - 2)}" width="${fmt(box.w + 6)}" height="${fmt(box.h + 4)}" rx="2" fill="#fbfbf7" fill-opacity="0.88"/>`);
+      parts.push(texMarkup(lt, lf, lx, ly, { color: PREF, px: 11 }));
     }
 
     svg.setAttribute("viewBox", "0 0 " + w + " " + h);
@@ -760,8 +851,10 @@
     const s = state.selection;
     if (s) {
       els["stat-lambda-hat"].textContent = s.lambda.toFixed(3);
-      els["stat-posthoc"].textContent = "αᵢ=" + s.post.aI.toFixed(3) + ", αᵣ=" + s.post.aR.toFixed(3);
-      els["stat-posthoc-sub"].textContent = "recalibrated on held-out D₂ (pre-hoc on D₁: αᵢ=" + s.pre.aI.toFixed(3) + ", αᵣ=" + s.pre.aR.toFixed(3) + ")";
+      els["stat-post-ai"].textContent = s.post.aI.toFixed(3);
+      els["stat-post-ar"].textContent = s.post.aR.toFixed(3);
+      els["stat-pre-ai"].textContent = s.pre.aI.toFixed(3);
+      els["stat-pre-ar"].textContent = s.pre.aR.toFixed(3);
     }
   }
 
@@ -857,6 +950,14 @@
 
     updatePrefLabel();
     switchProblem(state.problemId);
+
+    // once MathJax has started, redraw the panels with real LaTeX labels
+    if (window.MathJax && MathJax.startup && MathJax.startup.promise) {
+      MathJax.startup.promise.then(() => {
+        texReady = typeof MathJax.tex2svg === "function";
+        if (texReady) queueRerender();
+      }).catch(() => {});
+    }
   }
 
   if (document.readyState === "loading") {

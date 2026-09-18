@@ -16,10 +16,11 @@
       displayMath: [["\\[", "\\]"]],
       macros: { argmin: "\\operatorname{arg\\,min}", argmax: "\\operatorname{arg\\,max}" }
     },
+    svg: { fontCache: "none" },
     options: { skipHtmlTags: ["script", "noscript", "style", "textarea", "pre", "code"] }
   };
 </script>
-<script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js" defer></script>
+<script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js" defer></script>
 <script src="script.js" defer></script>
 </head>
 <body>
@@ -43,7 +44,7 @@
         <h1>CREME</h1>
         <p class="subtitle">Calibrating Decision Robustness via<br>Inverse Conformal Risk Control</p>
         <p class="tagline">
-          Robust optimization needs a robustness level — a radius, a confidence, a coverage target — and that
+          Robust optimization needs a robustness level (a radius, a confidence, a coverage target), and that
           number is usually picked by hand. CREME inverts the logic of conformal risk control: instead of fixing
           a risk target and solving for a set, it takes the uncertainty set as given and certifies, with finite-sample
           guarantees, the miscoverage and regret it actually buys you. Sweep the parameter and the trade-off
@@ -55,7 +56,7 @@
           <a class="button" href="https://arxiv.org/abs/2510.07750" target="_blank" rel="noopener noreferrer">arXiv:2510.07750</a>
           <a class="button" href="#citation">Citation</a>
         </div>
-        <p class="authors">Wenbin Zhou · Shixiang Zhu — Carnegie Mellon University</p>
+        <p class="authors">Wenbin Zhou · Shixiang Zhu · Carnegie Mellon University</p>
       </div>
       <aside class="hero-gauge" aria-label="Certified Pareto frontier, illustrative">
         <span class="gauge-label">Miscoverage – regret frontier</span>
@@ -72,7 +73,7 @@
           <line x1="150" y1="90" x2="150" y2="112" class="gauge-guide"/>
           <text x="122" y="84" class="gauge-annot">&#8722;25% risk &#8594; +$150 cost</text>
         </svg>
-        <p class="gauge-caption">Reducing risk further costs more — CREME certifies exactly how much.</p>
+        <p class="gauge-caption">Reducing risk further costs more. CREME certifies exactly how much.</p>
       </aside>
     </section>
 
@@ -83,22 +84,22 @@
       <div class="idea-grid">
         <article class="idea-card">
           <p class="idea-eyebrow">Standard CRC</p>
-          <p class="idea-body">Pick a risk level first — “5% miscoverage” — then search for a set or decision
+          <p class="idea-body">Pick a risk level first, say “5% miscoverage”, then search for a set or decision
             rule that meets it. The target is fixed; the set is solved for.</p>
         </article>
         <div class="idea-arrow" aria-hidden="true">&#8644;</div>
         <article class="idea-card idea-card-accent">
           <p class="idea-eyebrow">Inverse CRC (this paper)</p>
-          <p class="idea-body">Fix the uncertainty set — the robustness level \(\lambda\) an engineer already
-            uses — and certify the miscoverage and regret it actually incurs. The set is given; the risk is
+          <p class="idea-body">Fix the uncertainty set, that is, the robustness level \(\lambda\) an engineer already
+            uses, and certify the miscoverage and regret it actually incurs. The set is given; the risk is
             solved for.</p>
         </article>
       </div>
       <p class="lead idea-lead">
         Sweeping \(\lambda\) traces a curve, not a point: as the uncertainty set shrinks, miscoverage rises and
         regret falls, and vice versa. CREME's estimators \(\hat\alpha_I(\lambda)\) and \(\hat\alpha_R(\lambda)\)
-        stay valid at every \(\lambda\) simultaneously, so the whole curve — a certified Pareto frontier — can be
-        hand to a decision-maker instead of a single ad hoc number.
+        stay valid at every \(\lambda\) simultaneously, so the whole curve, a certified Pareto frontier, can be
+        handed to a decision-maker instead of a single ad hoc number.
       </p>
     </section>
 
@@ -148,7 +149,7 @@
           <p>Given a calibration average \(\bar\ell_n(\lambda)=\tfrac1n\sum_i \ell_\lambda(x_i,y_i)\) and loss bound
             \(B\), the estimator inflates the empirical average by a worst-case correction for the unseen point:</p>
           \[ \tilde\alpha_\ell(\lambda) = \frac{n}{n+1}\,\bar\ell_n(\lambda) + \frac{B}{n+1} \]
-          <p class="formula-note">This is the number the demo plots — no assumption on the distribution of \(Y\)
+          <p class="formula-note">This is the number the demo plots. No assumption on the distribution of \(Y\)
             is needed, only exchangeability and a bounded loss.</p>
         </article>
 
@@ -167,7 +168,7 @@
           \[ \alpha_I(\lambda_1)\ge\alpha_I(\lambda_2),\qquad \alpha_R(\lambda_1)\le\alpha_R(\lambda_2)\quad(\lambda_1\le\lambda_2) \]
           <p>so its image is exactly the Pareto frontier of the robust policy family. Because
             \(\hat\alpha_I,\hat\alpha_R\) upper-bound the true values pointwise, the pruned lower-left envelope of
-            \(\{(\hat\alpha_I(\lambda),\hat\alpha_R(\lambda))\}\) is a certified — conservative but valid —
+            \(\{(\hat\alpha_I(\lambda),\hat\alpha_R(\lambda))\}\) is a certified (conservative but valid)
             outer approximation of that frontier.</p>
         </article>
 
@@ -177,7 +178,7 @@
             after seeing the frontier breaks exchangeability, which can erode validity by a selection bias term
             \(\Delta(g,\mathcal P)\). CREME restores it with a single split: the frontier shown for selection is
             built from one half of the calibration data, and \(\hat\lambda\) is re-scored on the untouched other
-            half — restoring an exact finite-sample guarantee at the selected point.</p>
+            half, which restores an exact finite-sample guarantee at the selected point.</p>
         </article>
       </div>
 
@@ -301,23 +302,23 @@
         <div class="stat-row">
           <div class="stat-card">
             <span class="stat-label">\(\hat\alpha_I(\lambda)\)</span>
-            <span class="stat-value" id="stat-alpha-i">&mdash;</span>
+            <span class="stat-value" id="stat-alpha-i">&ndash;</span>
             <span class="stat-sub">certified miscoverage bound</span>
           </div>
           <div class="stat-card">
             <span class="stat-label">\(\hat\alpha_R(\lambda)\)</span>
-            <span class="stat-value" id="stat-alpha-r">&mdash;</span>
+            <span class="stat-value" id="stat-alpha-r">&ndash;</span>
             <span class="stat-sub">certified regret bound</span>
           </div>
           <div class="stat-card">
             <span class="stat-label">\(\epsilon\)</span>
-            <span class="stat-value" id="stat-epsilon">&mdash;</span>
+            <span class="stat-value" id="stat-epsilon">&ndash;</span>
             <span class="stat-sub">finite-sample bound, prob. \(1-\delta\)</span>
           </div>
           <div class="stat-card stat-card-wide" id="stat-posthoc-card">
             <span class="stat-label">post-hoc at \(\hat\lambda=\)<span id="stat-lambda-hat"></span></span>
-            <span class="stat-value" id="stat-posthoc">&mdash;</span>
-            <span class="stat-sub" id="stat-posthoc-sub">recalibrated on held-out split \(\mathcal D_2\)</span>
+            <span class="stat-value" id="stat-posthoc">\(\hat\alpha_I=\)<span id="stat-post-ai">&ndash;</span>, \(\hat\alpha_R=\)<span id="stat-post-ar">&ndash;</span></span>
+            <span class="stat-sub" id="stat-posthoc-sub">recalibrated on held-out \(\mathcal D_2\) (pre-hoc on \(\mathcal D_1\): \(\hat\alpha_I=\)<span id="stat-pre-ai">&ndash;</span>, \(\hat\alpha_R=\)<span id="stat-pre-ar">&ndash;</span>)</span>
           </div>
         </div>
 
@@ -349,8 +350,8 @@
             average at matched sample sizes.</p>
         </div>
         <div class="result-card">
-          <span class="result-number">O(n<sup>&minus;1/2</sup>)</span>
-          <p>the estimation error decays at a parametric rate — accuracy improves fast even though the guarantee
+          <span class="result-number">\(O(n^{-1/2})\)</span>
+          <p>the estimation error decays at a parametric rate: accuracy improves fast even though the guarantee
             never relies on knowing the outcome distribution.</p>
         </div>
         <div class="result-card">
@@ -379,7 +380,7 @@
   </main>
 
   <footer class="footer">
-    <p>CREME &mdash; Conformal REgret-Miscoverage Estimate</p>
+    <p>CREME: Conformal REgret-Miscoverage Estimate</p>
     <p class="footer-credit">Unofficial project page, built from the paper's methodology and experiments.</p>
   </footer>
 </body>
