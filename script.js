@@ -36,6 +36,13 @@
     ctx.fillStyle = fill; ctx.fill();
     if (stroke) { ctx.strokeStyle = stroke; ctx.lineWidth = 1.2; ctx.stroke(); }
   }
+  function roundRectPath(ctx, x, y, w, h, r) {
+    ctx.beginPath();
+    ctx.moveTo(x + r, y); ctx.lineTo(x + w - r, y); ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+    ctx.lineTo(x + w, y + h - r); ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+    ctx.lineTo(x + r, y + h); ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+    ctx.lineTo(x, y + r); ctx.quadraticCurveTo(x, y, x + r, y); ctx.closePath();
+  }
   function ring(ctx, x, y, r, stroke) {
     ctx.beginPath(); ctx.arc(x, y, r, 0, 2 * Math.PI);
     ctx.fillStyle = "rgba(251,251,247,0.85)"; ctx.fill();
@@ -156,13 +163,14 @@
     if (bHi < zMax) ctx.fillRect(sx(bHi), stripY, sx(zMax) - sx(bHi), stripH);
     ctx.strokeStyle = "rgba(36,66,90,0.5)"; ctx.lineWidth = 1;
     ctx.strokeRect(sx(zMin), stripY, sx(zMax) - sx(zMin), stripH);
-    // limit handles: a bar through the strip with a square grip above it
-    const handleY = stripY - 9;
+    // limit grips: a tall rounded bar with a ridged knob, easy to grab
+    const gripTop = stripY - 8, gripBot = stripY + stripH + 8;
     [bLo, bHi].forEach((b) => {
-      ctx.strokeStyle = ACCENT; ctx.lineWidth = 2;
-      ctx.beginPath(); ctx.moveTo(sx(b), stripY - 4); ctx.lineTo(sx(b), stripY + stripH + 4); ctx.stroke();
-      ctx.fillStyle = "#fbfbf7"; ctx.lineWidth = 1.6;
-      ctx.beginPath(); ctx.rect(sx(b) - 4.5, handleY - 4.5, 9, 9); ctx.fill(); ctx.stroke();
+      const x = sx(b);
+      ctx.fillStyle = "#fbfbf7"; ctx.strokeStyle = ACCENT; ctx.lineWidth = 1.6;
+      roundRectPath(ctx, x - 5, gripTop, 10, gripBot - gripTop, 4); ctx.fill(); ctx.stroke();
+      ctx.strokeStyle = "rgba(36,66,90,0.55)"; ctx.lineWidth = 1;
+      [-3, 0, 3].forEach((d) => { ctx.beginPath(); ctx.moveTo(x - 2, stripY + stripH / 2 + d); ctx.lineTo(x + 2, stripY + stripH / 2 + d); ctx.stroke(); });
     });
     ticks.forEach((t) => {
       ctx.beginPath(); ctx.moveTo(sx(t), stripY + stripH); ctx.lineTo(sx(t), stripY + stripH + 4); ctx.stroke();
@@ -197,36 +205,42 @@
       ring(ctx, cx, stripY + stripH / 2, 7, PREF);
     }
 
-    // minimiser
+    // minimiser (draggable: sets lambda)
     const vStar = objective(zStar);
     ctx.setLineDash([3, 3]); ctx.strokeStyle = BRASS_DARK; ctx.lineWidth = 1;
     ctx.beginPath(); ctx.moveTo(sx(zStar), sy(vStar)); ctx.lineTo(sx(zStar), stripY + stripH); ctx.stroke();
     ctx.setLineDash([]);
-    dot(ctx, sx(zStar), sy(vStar), 5.5, BRASS, BRASS_DARK);
-    dot(ctx, sx(zStar), stripY + stripH / 2, 5.5, BRASS, BRASS_DARK);
+    dot(ctx, sx(zStar), sy(vStar), 6, BRASS, BRASS_DARK);
+    dot(ctx, sx(zStar), stripY + stripH / 2, 7, BRASS, BRASS_DARK);
     const iz = (px) => Math.min(zMax, Math.max(zMin, zMin + ((px - padL) / (w - padL - padR)) * (zMax - zMin)));
-    return { sx, sy, iz, stripY, stripH, curveTop, curveBot, padL, padR, candidateY: stripY + stripH / 2, handleY, zMin, zMax };
+    return { sx, sy, iz, stripY, stripH, curveTop, curveBot, padL, padR, candidateY: stripY + stripH / 2, gripTop, gripBot, zMin, zMax, zStar, zStarCurveY: sy(vStar) };
   }
 
+  // Hit tolerances are given in screen pixels; the canvas is drawn at 360 logical
+  // px but displayed narrower or wider, so convert with the current scale.
+  function hitR(screenPx) { return screenPx * (state.pointerScale || 1); }
+
   // Shared interaction for the one-dimensional decision panels.
-  function hitTest1D(problem, p, g, state) {
-    if (state.candidate) {
-      const cx = g.sx(problem.toScalar(state.candidate));
-      if (Math.hypot(cx - p[0], g.candidateY - p[1]) <= 12) return { type: "candidate" };
-    }
+  function hitTest1D(problem, p, g, scope) {
+    const near = (x, y, r) => Math.hypot(x - p[0], y - p[1]) <= hitR(r);
+    if (scope.candidate && near(g.sx(problem.toScalar(scope.candidate)), g.candidateY, 12)) return { type: "candidate" };
+    // the robust decision itself: dragging it sets lambda
+    if (near(g.sx(g.zStar), g.candidateY, 11) || near(g.sx(g.zStar), g.zStarCurveY, 11)) return { type: "zstar" };
     const [lo, hi] = problem.bounds;
-    if (Math.hypot(g.sx(hi) - p[0], g.handleY - p[1]) <= 10) return { type: "hi" };
-    if (Math.hypot(g.sx(lo) - p[0], g.handleY - p[1]) <= 10) return { type: "lo" };
+    const onGrip = (b) => Math.abs(g.sx(b) - p[0]) <= hitR(9) && p[1] >= g.gripTop - hitR(4) && p[1] <= g.gripBot + hitR(4);
+    if (onGrip(hi)) return { type: "hi" };
+    if (onGrip(lo)) return { type: "lo" };
     return null;
   }
-  function drag1D(problem, hit, p, g, state) {
+  function drag1D(problem, hit, p, g, scope) {
     const t = g.iz(p[0]);
-    if (hit.type === "candidate") { state.candidate = problem.fromScalar(clamp(t, problem.bounds[0], problem.bounds[1])); return "candidate"; }
+    if (hit.type === "candidate") { scope.candidate = problem.fromScalar(clamp(t, problem.bounds[0], problem.bounds[1])); return "candidate"; }
+    if (hit.type === "zstar") { scope.lambda = problem.lambdaFor(t); return "lambda"; }
     const gap = (g.zMax - g.zMin) * 0.04;
     if (hit.type === "lo") problem.bounds[0] = Math.min(t, problem.bounds[1] - gap);
     else problem.bounds[1] = Math.max(t, problem.bounds[0] + gap);
     problem.bounds[0] = Math.max(g.zMin, problem.bounds[0]); problem.bounds[1] = Math.min(g.zMax, problem.bounds[1]);
-    state.candidate = problem.fromScalar(clamp(problem.toScalar(state.candidate), problem.bounds[0], problem.bounds[1]));
+    scope.candidate = problem.fromScalar(clamp(problem.toScalar(scope.candidate), problem.bounds[0], problem.bounds[1]));
     return "recompute";
   }
   function clamp(v, lo, hi) { return Math.min(hi, Math.max(lo, v)); }
@@ -381,10 +395,10 @@
     },
     hitTest(p, g, state) {
       const c = state.candidate;
-      if (c && Math.hypot(g.sx(c[0]) - p[0], g.sy(c[1]) - p[1]) <= 11) return { type: "candidate" };
+      if (c && Math.hypot(g.sx(c[0]) - p[0], g.sy(c[1]) - p[1]) <= hitR(12)) return { type: "candidate" };
       for (let i = 0; i < LP.vertices.length; i++) {
         const v = LP.vertices[i];
-        if (Math.hypot(g.sx(v[0]) - p[0], g.sy(v[1]) - p[1]) <= 9) return { type: "vertex", index: i };
+        if (Math.hypot(g.sx(v[0]) - p[0], g.sy(v[1]) - p[1]) <= hitR(11)) return { type: "vertex", index: i };
       }
       return null;
     },
@@ -426,6 +440,8 @@
     reset() { NEWS.bounds = [0, 3.2]; },
     toScalar(z) { return z[0]; },
     fromScalar(t) { return [t]; },
+    // inverse of z* = mu - lambda, so the amber marker can be dragged to choose lambda
+    lambdaFor(t) { return clamp(NEWS.mu[0] - t, 0, NEWS.lambdaMax); },
     // cost is decreasing in y, so the worst case in [mu-lambda, mu+lambda] is the low end
     robustObjective(z, lambda) { return NEWS.costOfDecision(z, { vec: [NEWS.mu[0] - lambda] }); },
     worstCase(lambda) { return [NEWS.mu[0] - lambda]; },
@@ -437,7 +453,7 @@
     // with p > c the cost is minimised at z = y, clamped to the feasible interval
     oracleCost(y) { return NEWS.costOfDecision([clamp(y.vec[0], NEWS.bounds[0], NEWS.bounds[1])], y); },
     objectiveHTML: "\\[ \\min_{z_{\\min}\\le z\\le z_{\\max}}\\ \\max_{y\\in\\mathcal U_\\lambda}\\big[-p\\min(y,z)+cz-v(z-y)^+\\big],\\quad (p,c,v)=(4,2,0) \\]",
-    decisionSubtitle: "Worst-case cost as a function of the order quantity \\(z\\), minimised at \\(z^*_\\lambda\\) (\\(\\mu-\\lambda\\) clamped to the feasible interval). Drag the square grips to set \\(z_{\\min}, z_{\\max}\\), or the hollow marker to test a candidate \\(z\\).",
+    decisionSubtitle: "Worst-case cost as a function of the order quantity \\(z\\), minimised at \\(z^*_\\lambda\\) (\\(\\mu-\\lambda\\) clamped to the feasible interval). Drag the amber marker to choose the order and set \\(\\lambda\\), the tall grips to set \\(z_{\\min}, z_{\\max}\\), or the hollow marker to test a candidate \\(z\\).",
     formatZ(z) { return z[0].toFixed(2); },
     defaultCandidate() { return [clamp(NEWS.mu[0], NEWS.bounds[0], NEWS.bounds[1])]; },
     drawDecision(ctx, w, h, state) {
@@ -449,12 +465,13 @@
         xLabel: ["\\text{order quantity } z", "order quantity z"],
         objLabel: ["\\max_{y\\in\\mathcal U_\\lambda} f(y,z)", "worst-case cost"], ticks: [0, 1, 2, 3]
       });
-      drawTex(ctx, "z^\\star_\\lambda = " + z.toFixed(2), "z*(λ) = " + z.toFixed(2), g.sx(z) + 8, g.stripY - 8, { color: BRASS_DARK, px: 11, align: "left", w, flip: g.sx(z) - 8, plate: true });
+      const bind = z <= NEWS.bounds[0] + 1e-9 ? "\\ (z_{\\min}\\text{ binds})" : z >= NEWS.bounds[1] - 1e-9 ? "\\ (z_{\\max}\\text{ binds})" : "";
+      drawTex(ctx, "z^\\star_\\lambda = " + z.toFixed(2) + bind, "z*(λ) = " + z.toFixed(2), g.sx(z) + 10, g.stripY - 14, { color: BRASS_DARK, px: 11, align: "left", w, flip: g.sx(z) - 10, plate: true });
       return g;
     },
     hitTest(p, g, st) { return hitTest1D(NEWS, p, g, st); },
     drag(hit, p, g, st) { return drag1D(NEWS, hit, p, g, st); },
-    legendHTML: '<span><i class="legend-grad"></i>worst-case cost (low &rarr; high) along \\(z\\)</span><span><i class="legend-dot lambda"></i>Order quantity \\(z^*_\\lambda\\)</span><span><i class="legend-square"></i>Limits \\(z_{\\min}, z_{\\max}\\) (drag)</span><span><i class="legend-dot candidate"></i>Candidate \\(z\\) (drag)</span>'
+    legendHTML: '<span><i class="legend-grad"></i>worst-case cost (low &rarr; high) along \\(z\\)</span><span><i class="legend-dot lambda"></i>Order quantity \\(z^*_\\lambda\\) (drag to set \\(\\lambda\\))</span><span><i class="legend-grip"></i>Limits \\(z_{\\min}, z_{\\max}\\) (drag)</span><span><i class="legend-dot candidate"></i>Candidate \\(z\\) (drag)</span>'
   };
 
   /* ---------------- Problem: Portfolio selection ---------------- */
@@ -473,6 +490,12 @@
     reset() { PORT.bounds = [0, 1]; },
     toScalar(z) { return z[0]; },
     fromScalar(t) { return [t, 1 - t]; },
+    // z_1*(lambda) is monotone where it moves; pick the grid lambda whose optimum is closest
+    lambdaFor(t) {
+      let best = 0, bestD = Infinity;
+      state.lambdaGrid.forEach((l, i) => { const d = Math.abs(state.zCache[i][0] - t); if (d < bestD - 1e-12) { bestD = d; best = l; } });
+      return best;
+    },
     robustObjective(z, lambda) {
       const ret = PORT.mu[0] * z[0] + PORT.mu[1] * z[1];
       return -ret + lambda * (z[0] * z[0] + z[1] * z[1]) / 3;
@@ -496,7 +519,7 @@
       return Math.min(PORT.costOfDecision([lo, 1 - lo], y), PORT.costOfDecision([hi, 1 - hi], y));
     },
     objectiveHTML: "\\[ \\min_{z_1+z_2=1,\\ \\ell\\le z_1\\le u}\\ -\\mu^\\top z + \\lambda\\Big(\\tfrac{z_1^2+z_2^2}{3}\\Big),\\quad \\mu=(2.15,1.85) \\]",
-    decisionSubtitle: "Objective along the two-asset simplex; \\(z^*_\\lambda\\) is its minimiser within the position limits \\(\\ell\\le z_1\\le u\\). Drag the square grips to set the limits, or the hollow marker to test a candidate split.",
+    decisionSubtitle: "Objective along the two-asset simplex; \\(z^*_\\lambda\\) is its minimiser within the position limits \\(\\ell\\le z_1\\le u\\). Drag the amber marker to choose a split and set \\(\\lambda\\), the tall grips to set the limits, or the hollow marker to test a candidate split.",
     formatZ(z) { return "(" + z[0].toFixed(2) + ", " + z[1].toFixed(2) + ")"; },
     defaultCandidate() { const t = clamp(0.5, PORT.bounds[0], PORT.bounds[1]); return [t, 1 - t]; },
     drawDecision(ctx, w, h, state) {
@@ -509,13 +532,14 @@
         objLabel: ["-\\mu^\\top z + \\lambda\\,\\|z\\|^2/3", "objective"],
         ticks: [0, 0.25, 0.5, 0.75, 1], fmtTick: (t) => t.toFixed(2)
       });
-      drawTex(ctx, "z^\\star_\\lambda=(" + z1.toFixed(2) + ",\\," + (1 - z1).toFixed(2) + ")",
-        "z*(λ) = (" + z1.toFixed(2) + ", " + (1 - z1).toFixed(2) + ")", g.sx(z1) + 8, g.stripY - 8, { color: BRASS_DARK, px: 11, align: "left", w, flip: g.sx(z1) - 8, plate: true });
+      const bind = z1 <= PORT.bounds[0] + 1e-9 ? "\\ (\\ell\\text{ binds})" : z1 >= PORT.bounds[1] - 1e-9 ? "\\ (u\\text{ binds})" : "";
+      drawTex(ctx, "z^\\star_\\lambda=(" + z1.toFixed(2) + ",\\," + (1 - z1).toFixed(2) + ")" + bind,
+        "z*(λ) = (" + z1.toFixed(2) + ", " + (1 - z1).toFixed(2) + ")", g.sx(z1) + 10, g.stripY - 14, { color: BRASS_DARK, px: 11, align: "left", w, flip: g.sx(z1) - 10, plate: true });
       return g;
     },
     hitTest(p, g, st) { return hitTest1D(PORT, p, g, st); },
     drag(hit, p, g, st) { return drag1D(PORT, hit, p, g, st); },
-    legendHTML: '<span><i class="legend-grad"></i>objective (low &rarr; high) along the simplex</span><span><i class="legend-dot lambda"></i>Weight split \\(z^*_\\lambda\\)</span><span><i class="legend-square"></i>Position limits \\(\\ell, u\\) (drag)</span><span><i class="legend-dot candidate"></i>Candidate \\(z\\) (drag)</span>'
+    legendHTML: '<span><i class="legend-grad"></i>objective (low &rarr; high) along the simplex</span><span><i class="legend-dot lambda"></i>Weight split \\(z^*_\\lambda\\)</span><span><i class="legend-grip"></i>Position limits \\(\\ell, u\\) (drag)</span><span><i class="legend-dot candidate"></i>Candidate \\(z\\) (drag)</span>'
   };
 
   /* ---------------- Problem: Shortest path ---------------- */
@@ -637,10 +661,10 @@
     },
     hitTest(p, g) {
       const n = SP.nodes;
-      const near = (q, r) => Math.hypot(q[0] - p[0], q[1] - p[1]) <= r;
-      if (near(n.aMid, 10)) return { type: "node", key: "aMid" };
-      for (const key of ["b", "c1", "c2"]) if (near(n[key], 10)) return { type: "node", key };
-      let best = null, bestD = 10;
+      const near = (q, r) => Math.hypot(q[0] - p[0], q[1] - p[1]) <= hitR(r);
+      if (near(n.aMid, 12)) return { type: "node", key: "aMid" };
+      for (const key of ["b", "c1", "c2"]) if (near(n[key], 12)) return { type: "node", key };
+      let best = null, bestD = hitR(10);
       g.segments.forEach((sg) => {
         const q = nearestOnSegment(p, sg.a, sg.b);
         const d = Math.hypot(q[0] - p[0], q[1] - p[1]);
@@ -1158,17 +1182,21 @@
   /* ---------------- Dragging in the decision panel ---------------- */
   function canvasPoint(canvas, e) {
     const r = canvas.getBoundingClientRect();
+    state.pointerScale = CANVAS_W / r.width; // logical px per screen px
     return [((e.clientX - r.left) / r.width) * CANVAS_W, ((e.clientY - r.top) / r.height) * CANVAS_H];
   }
-  let interactiveTimer = null, needsRecompute = false;
-  // Coalesce pointer events: one update per tick, and a full recompute only if the
-  // feasible region changed (that shifts z*, the regret bound and every curve).
-  function scheduleInteractive(recompute) {
-    needsRecompute = needsRecompute || recompute;
+  let interactiveTimer = null, needsRecompute = false, needsFullRender = false;
+  // Coalesce pointer events: one update per tick. A full recompute only if the
+  // feasible region changed (that shifts z*, the regret bound and every curve);
+  // a full re-render if lambda changed; otherwise just the decision panel.
+  function scheduleInteractive(mode) {
+    needsRecompute = needsRecompute || mode === true;
+    needsFullRender = needsFullRender || mode === "lambda";
     if (interactiveTimer) return;
     interactiveTimer = setTimeout(() => {
       interactiveTimer = null;
-      if (needsRecompute) { needsRecompute = false; state.densityLayer = null; recomputeReference(); recomputeCalibration(); renderAll(); }
+      if (needsRecompute) { needsRecompute = needsFullRender = false; state.densityLayer = null; recomputeReference(); recomputeCalibration(); renderAll(); }
+      else if (needsFullRender) { needsFullRender = false; renderAll(2); }
       else renderDecision();
     }, 0);
   }
@@ -1185,6 +1213,7 @@
       const scope = { candidate: candidateFor(problem) };
       const kind = problem.drag(state.drag, canvasPoint(canvas, e), state.decisionGeom, scope);
       state.candidate[problem.id] = scope.candidate;
+      if (kind === "lambda") { setLambda(scope.lambda); scheduleInteractive("lambda"); return; }
       scheduleInteractive(kind === "recompute");
     };
     canvas.addEventListener("pointerdown", (e) => {
