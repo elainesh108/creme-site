@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Spectral:ital,wght@0,400;0,500;0,600;0,700;1,400&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=20260918c">
+<link rel="stylesheet" href="style.css?v=20260918d">
 <script>
   window.MathJax = {
     tex: {
@@ -21,177 +21,29 @@
   };
 </script>
 <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js" defer></script>
-<script src="script.js?v=20260918c" defer></script>
+<script src="script.js?v=20260918d" defer></script>
 </head>
 <body>
   <header class="site-header">
     <nav class="nav" aria-label="Primary navigation">
       <a class="brand" href="#top" aria-label="CREME home"><span class="brand-mark">CREME</span></a>
-      <div class="nav-links">
-        <a href="#idea">Idea</a>
-        <a href="#method">Method</a>
-        <a href="#demo">Demo</a>
+      <div class="nav-links" role="tablist" aria-label="Page">
+        <a class="page-tab is-active" href="#demo" data-panel="demo" role="tab" aria-selected="true">Demo</a>
+        <a class="page-tab" href="#explanation" data-panel="explanation" role="tab" aria-selected="false">Explanation</a>
         <a href="paper.pdf">Paper</a>
-        <a href="#citation">Citation</a>
+        <a href="https://arxiv.org/abs/2510.07750" target="_blank" rel="noopener noreferrer">arXiv</a>
       </div>
     </nav>
   </header>
 
   <main id="top">
-    <section class="hero">
-      <div class="hero-content">
-        <p class="kicker">Robust predict-then-optimize · ICML 2026 submission</p>
-        <h1>CREME</h1>
-        <p class="subtitle">Calibrating Decision Robustness via<br>Inverse Conformal Risk Control</p>
-        <p class="tagline">
-          Robust optimization needs a robustness level (a radius, a confidence, a coverage target), and that
-          number is usually picked by hand. CREME inverts the logic of conformal risk control: instead of fixing
-          a risk target and solving for a set, it takes the uncertainty set as given and certifies, with finite-sample
-          guarantees, the miscoverage and regret it actually buys you. Sweep the parameter and the trade-off
-          traces itself.
-        </p>
-        <div class="button-row">
-          <a class="button primary" href="#demo">Try the demo</a>
-          <a class="button" href="paper.pdf">Read the paper</a>
-          <a class="button" href="https://arxiv.org/abs/2510.07750" target="_blank" rel="noopener noreferrer">arXiv:2510.07750</a>
-          <a class="button" href="#citation">Citation</a>
-        </div>
-        <p class="authors">Wenbin Zhou · Shixiang Zhu · Carnegie Mellon University</p>
-      </div>
-      <aside class="hero-gauge" aria-label="Certified Pareto frontier, illustrative">
-        <span class="gauge-label">Miscoverage – regret frontier</span>
-        <svg class="gauge-svg" viewBox="0 0 260 190" role="img" aria-hidden="true">
-          <line x1="34" y1="18" x2="34" y2="158" class="gauge-axis"/>
-          <line x1="34" y1="158" x2="240" y2="158" class="gauge-axis"/>
-          <text x="10" y="90" class="gauge-axis-label" transform="rotate(-90 10 90)">Cost ($)</text>
-          <text x="130" y="180" class="gauge-axis-label" text-anchor="middle">Risk (%)</text>
-          <path class="gauge-true" d="M 40 34 C 80 40, 100 60, 118 90 C 138 122, 175 140, 234 146" />
-          <path id="gauge-certified" class="gauge-certified" d="M 40 34 C 80 40, 100 60, 118 90 C 138 122, 175 140, 234 146" pathLength="1" />
-          <circle cx="118" cy="90" r="3.4" class="gauge-dot gauge-dot-a"/>
-          <circle cx="150" cy="112" r="3.4" class="gauge-dot gauge-dot-b"/>
-          <line x1="118" y1="90" x2="150" y2="90" class="gauge-guide"/>
-          <line x1="150" y1="90" x2="150" y2="112" class="gauge-guide"/>
-          <text x="122" y="84" class="gauge-annot">&#8722;25% risk &#8594; +$150 cost</text>
-        </svg>
-        <p class="gauge-caption">Reducing risk further costs more. CREME certifies exactly how much.</p>
-      </aside>
-    </section>
-
-    <section id="idea" class="section">
-      <div class="section-heading">
-        <h2>Conformal risk control, run backwards</h2>
-      </div>
-      <div class="idea-grid">
-        <article class="idea-card">
-          <p class="idea-eyebrow">Standard CRC</p>
-          <p class="idea-body">Pick a risk level first, say “5% miscoverage”, then search for a set or decision
-            rule that meets it. The target is fixed; the set is solved for.</p>
-        </article>
-        <div class="idea-arrow" aria-hidden="true">&#8644;</div>
-        <article class="idea-card idea-card-accent">
-          <p class="idea-eyebrow">Inverse CRC (this paper)</p>
-          <p class="idea-body">Fix the uncertainty set, that is, the robustness level \(\lambda\) an engineer already
-            uses, and certify the miscoverage and regret it actually incurs. The set is given; the risk is
-            solved for.</p>
-        </article>
-      </div>
-      <p class="lead idea-lead">
-        Sweeping \(\lambda\) traces a curve, not a point: as the uncertainty set shrinks, miscoverage rises and
-        regret falls, and vice versa. CREME's estimators \(\hat\alpha_I(\lambda)\) and \(\hat\alpha_R(\lambda)\)
-        stay valid at every \(\lambda\) simultaneously, so the whole curve, a certified Pareto frontier, can be
-        handed to a decision-maker instead of a single ad hoc number.
-      </p>
-    </section>
-
-    <section id="method" class="section">
-      <div class="section-heading">
-        <p class="eyebrow">Method</p>
-        <h2>From a fixed \(\lambda\) to a certified frontier</h2>
-        <p class="lead">The full derivation is in the paper; here is the chain of definitions the demo below
-          runs on live.</p>
-      </div>
-
-      <div class="notation-wrap">
-        <table class="notation-table">
-          <caption>Notation</caption>
-          <tbody>
-            <tr><td>\(X\in\mathcal X,\ Y\in\mathcal Y\)</td><td>context and outcome, revealed after the decision</td></tr>
-            <tr><td>\(z\in\mathcal Z\)</td><td>decision variable; \(f(y,z)\) its cost under outcome \(y\)</td></tr>
-            <tr><td>\(\lambda\in\Lambda\subseteq\mathbb R_+\)</td><td>robustness level; nested sets \(\lambda_1\le\lambda_2\Rightarrow\mathcal U_{\lambda_1}\subseteq\mathcal U_{\lambda_2}\)</td></tr>
-            <tr><td>\(\mathcal U_\lambda(X)\)</td><td>uncertainty set for \(Y\) at level \(\lambda\)</td></tr>
-            <tr><td>\(z^*_\lambda(X)\)</td><td>robust decision at level \(\lambda\)</td></tr>
-            <tr><td>\(I_\lambda,\ R_\lambda\)</td><td>miscoverage loss (0/1) and regret loss (\(\ge 0\))</td></tr>
-            <tr><td>\(\hat\alpha_I(\lambda),\ \hat\alpha_R(\lambda)\)</td><td>certified upper bounds on expected miscoverage / regret</td></tr>
-            <tr><td>\(n,\ B,\ \delta\)</td><td>calibration size, loss bound, failure probability</td></tr>
-            <tr><td>\(\hat\lambda\)</td><td>robustness level chosen post hoc from the frontier</td></tr>
-          </tbody>
-        </table>
-      </div>
-
-      <div class="formula-stack">
-        <article class="formula-block">
-          <h3>1. The robust decision</h3>
-          <p>For nested sets \(\mathcal U_\lambda(X)\), the robust decision minimizes the worst case inside the set:</p>
-          \[ z^*_\lambda(X) := \argmin_{z\in\mathcal Z}\ \max_{y\in\mathcal U_\lambda(X)} f(y,z) \]
-          <p>Its two failure modes are scored per observation:</p>
-          \[ I_\lambda(X,Y) := \mathbb 1[\,Y\notin\mathcal U_\lambda(X)\,],\qquad
-             R_\lambda(X,Y) := f(Y,z^*_\lambda(X)) - \min_{z\in\mathcal Z} f(Y,z) \]
-        </article>
-
-        <article class="formula-block">
-          <h3>2. What "certified" means</h3>
-          <p>An estimator is certified when it upper-bounds the true expected loss at every \(\lambda\) at once:</p>
-          \[ \hat\alpha_I(\lambda) \ge \mathbb E[I_\lambda(X,Y)],\qquad \hat\alpha_R(\lambda) \ge \mathbb E[R_\lambda(X,Y)] \]
-        </article>
-
-        <article class="formula-block">
-          <h3>3. The conformalized risk estimator</h3>
-          <p>Given a calibration average \(\bar\ell_n(\lambda)=\tfrac1n\sum_i \ell_\lambda(x_i,y_i)\) and loss bound
-            \(B\), the estimator inflates the empirical average by a worst-case correction for the unseen point:</p>
-          \[ \tilde\alpha_\ell(\lambda) = \frac{n}{n+1}\,\bar\ell_n(\lambda) + \frac{B}{n+1} \]
-          <p class="formula-note">This is the number the demo plots. No assumption on the distribution of \(Y\)
-            is needed, only exchangeability and a bounded loss.</p>
-        </article>
-
-        <article class="formula-block">
-          <h3>4. Validity, with a finite-sample rate</h3>
-          \[ \mathbb E[\hat\alpha_\ell(\lambda)] \ge \mathbb E[\ell_\lambda(X_{n+1},Y_{n+1})] \]
-          <p>and with probability at least \(1-\delta\) over an i.i.d. draw,</p>
-          \[ \big|\hat\alpha_\ell(\lambda) - \mathbb E[\ell_\lambda(X_{n+1},Y_{n+1})]\big|
-             \le \frac{B}{n+1}\left(\sqrt{\tfrac n2 \log\tfrac2\delta} + 2 + \tfrac1B\right) =: \epsilon \]
-        </article>
-
-        <article class="formula-block">
-          <h3>5. Why the curve is a frontier</h3>
-          <p>Under a mild monotonicity condition (shrinking \(\mathcal U_\lambda\) cannot raise the conditional
-            expected cost), the true risk pair is weakly decreasing in \(\lambda\):</p>
-          \[ \alpha_I(\lambda_1)\ge\alpha_I(\lambda_2),\qquad \alpha_R(\lambda_1)\le\alpha_R(\lambda_2)\quad(\lambda_1\le\lambda_2) \]
-          <p>so its image is exactly the Pareto frontier of the robust policy family. Because
-            \(\hat\alpha_I,\hat\alpha_R\) upper-bound the true values pointwise, the pruned lower-left envelope of
-            \(\{(\hat\alpha_I(\lambda),\hat\alpha_R(\lambda))\}\) is a certified (conservative but valid)
-            outer approximation of that frontier.</p>
-        </article>
-
-        <article class="formula-block">
-          <h3>6. Choosing \(\lambda\) after looking</h3>
-          <p>A decision-maker who picks \(\hat\lambda=\argmax_\lambda g(\hat\alpha_I(\lambda),\hat\alpha_R(\lambda))\)
-            after seeing the frontier breaks exchangeability, which can erode validity by a selection bias term
-            \(\Delta(g,\mathcal P)\). CREME restores it with a single split: the frontier shown for selection is
-            built from one half of the calibration data, and \(\hat\lambda\) is re-scored on the untouched other
-            half, which restores an exact finite-sample guarantee at the selected point.</p>
-        </article>
-      </div>
-
-      <div class="algo-block">
-        <h3>Algorithm 1 · CREME</h3>
-        <ol class="algo-steps">
-          <li><span class="algo-num">1</span><span class="algo-text">Split calibration data \(\mathcal D\) into \(\mathcal D_1,\mathcal D_2\).</span></li>
-          <li><span class="algo-num">2</span><span class="algo-text">For each \(\lambda\) on the grid, compute \(\hat\alpha_I(\lambda),\hat\alpha_R(\lambda)\) from \(\mathcal D_1\) via step 3's estimator.</span></li>
-          <li><span class="algo-num">3</span><span class="algo-text">Prune dominated points to form the pre-hoc frontier \(\hat{\mathcal F}^{(1)}\).</span></li>
-          <li><span class="algo-num">4</span><span class="algo-text">A decision-maker selects \(\hat\lambda\) from \(\hat{\mathcal F}^{(1)}\).</span></li>
-          <li><span class="algo-num">5</span><span class="algo-text">Recalibrate on \(\mathcal D_2\): report the post-hoc valid \(\big(\hat\alpha_I^{(2)}(\hat\lambda),\hat\alpha_R^{(2)}(\hat\lambda)\big)\).</span></li>
-        </ol>
-      </div>
+    <div class="page-panel" id="panel-demo" role="tabpanel">
+    <section class="masthead">
+      <p class="kicker">Robust predict-then-optimize · ICML 2026 submission</p>
+      <h1>CREME</h1>
+      <p class="subtitle">Calibrating Decision Robustness via Inverse Conformal Risk Control</p>
+      <p class="authors">Wenbin Zhou · Shixiang Zhu · Carnegie Mellon University &middot;
+        <a href="#explanation">How it works</a> &middot; <a href="paper.pdf">Paper</a></p>
     </section>
 
     <section id="demo" class="section demo-section">
@@ -199,12 +51,9 @@
         <p class="eyebrow">Interactive demo</p>
         <h2>Dial the robustness level, watch the frontier respond</h2>
         <p class="lead">
-          Four classical decision problems from the paper's experiments. Drag \(\lambda\) to move the robust
-          decision and re-price its risk. Every decision space is editable: drag the polytope's vertices, the
-          order or position limits, or the network's nodes to reshape the problem, and drag the hollow marker
-          to compare any candidate decision against \(z^*_\lambda\). The preference slider is a simulated decision-maker: it tilts a
-          tangent line against the pre-hoc frontier, picks \(\hat\lambda\) where it touches, and CREME
-          re-scores that \(\hat\lambda\) on the held-out split \(\mathcal D_2\) live.
+          Drag \(\lambda\), reshape each decision space by dragging its handles, and let the preference
+          slider pick \(\hat\lambda\) off the frontier. The method behind every panel is on the
+          <a href="#explanation">Explanation</a> tab.
         </p>
       </div>
 
@@ -353,6 +202,165 @@
         pipeline.
       </p>
     </section>
+    </div>
+
+    <div class="page-panel" id="panel-explanation" role="tabpanel" hidden>
+    <section class="hero" id="explanation">
+      <div class="hero-content">
+        <p class="kicker">Robust predict-then-optimize · ICML 2026 submission</p>
+        <h1>CREME</h1>
+        <p class="subtitle">Calibrating Decision Robustness via<br>Inverse Conformal Risk Control</p>
+        <p class="tagline">
+          Robust optimization needs a robustness level (a radius, a confidence, a coverage target), and that
+          number is usually picked by hand. CREME inverts the logic of conformal risk control: instead of fixing
+          a risk target and solving for a set, it takes the uncertainty set as given and certifies, with finite-sample
+          guarantees, the miscoverage and regret it actually buys you. Sweep the parameter and the trade-off
+          traces itself.
+        </p>
+        <div class="button-row">
+          <a class="button primary" href="#demo">Back to the demo</a>
+          <a class="button" href="paper.pdf">Read the paper</a>
+          <a class="button" href="https://arxiv.org/abs/2510.07750" target="_blank" rel="noopener noreferrer">arXiv:2510.07750</a>
+          <a class="button" href="#citation">Citation</a>
+        </div>
+        <p class="authors">Wenbin Zhou · Shixiang Zhu · Carnegie Mellon University</p>
+      </div>
+      <aside class="hero-gauge" aria-label="Certified Pareto frontier, illustrative">
+        <span class="gauge-label">Miscoverage – regret frontier</span>
+        <svg class="gauge-svg" viewBox="0 0 260 190" role="img" aria-hidden="true">
+          <line x1="34" y1="18" x2="34" y2="158" class="gauge-axis"/>
+          <line x1="34" y1="158" x2="240" y2="158" class="gauge-axis"/>
+          <text x="10" y="90" class="gauge-axis-label" transform="rotate(-90 10 90)">Cost ($)</text>
+          <text x="130" y="180" class="gauge-axis-label" text-anchor="middle">Risk (%)</text>
+          <path class="gauge-true" d="M 40 34 C 80 40, 100 60, 118 90 C 138 122, 175 140, 234 146" />
+          <path id="gauge-certified" class="gauge-certified" d="M 40 34 C 80 40, 100 60, 118 90 C 138 122, 175 140, 234 146" pathLength="1" />
+          <circle cx="118" cy="90" r="3.4" class="gauge-dot gauge-dot-a"/>
+          <circle cx="150" cy="112" r="3.4" class="gauge-dot gauge-dot-b"/>
+          <line x1="118" y1="90" x2="150" y2="90" class="gauge-guide"/>
+          <line x1="150" y1="90" x2="150" y2="112" class="gauge-guide"/>
+          <text x="122" y="84" class="gauge-annot">&#8722;25% risk &#8594; +$150 cost</text>
+        </svg>
+        <p class="gauge-caption">Reducing risk further costs more. CREME certifies exactly how much.</p>
+      </aside>
+    </section>
+
+    <section id="idea" class="section">
+      <div class="section-heading">
+        <h2>Conformal risk control, run backwards</h2>
+      </div>
+      <div class="idea-grid">
+        <article class="idea-card">
+          <p class="idea-eyebrow">Standard CRC</p>
+          <p class="idea-body">Pick a risk level first, say “5% miscoverage”, then search for a set or decision
+            rule that meets it. The target is fixed; the set is solved for.</p>
+        </article>
+        <div class="idea-arrow" aria-hidden="true">&#8644;</div>
+        <article class="idea-card idea-card-accent">
+          <p class="idea-eyebrow">Inverse CRC (this paper)</p>
+          <p class="idea-body">Fix the uncertainty set, that is, the robustness level \(\lambda\) an engineer already
+            uses, and certify the miscoverage and regret it actually incurs. The set is given; the risk is
+            solved for.</p>
+        </article>
+      </div>
+      <p class="lead idea-lead">
+        Sweeping \(\lambda\) traces a curve, not a point: as the uncertainty set shrinks, miscoverage rises and
+        regret falls, and vice versa. CREME's estimators \(\hat\alpha_I(\lambda)\) and \(\hat\alpha_R(\lambda)\)
+        stay valid at every \(\lambda\) simultaneously, so the whole curve, a certified Pareto frontier, can be
+        handed to a decision-maker instead of a single ad hoc number.
+      </p>
+    </section>
+
+    <section id="method" class="section">
+      <div class="section-heading">
+        <p class="eyebrow">Method</p>
+        <h2>From a fixed \(\lambda\) to a certified frontier</h2>
+        <p class="lead">The full derivation is in the paper; here is the chain of definitions the demo below
+          runs on live.</p>
+      </div>
+
+      <div class="notation-wrap">
+        <table class="notation-table">
+          <caption>Notation</caption>
+          <tbody>
+            <tr><td>\(X\in\mathcal X,\ Y\in\mathcal Y\)</td><td>context and outcome, revealed after the decision</td></tr>
+            <tr><td>\(z\in\mathcal Z\)</td><td>decision variable; \(f(y,z)\) its cost under outcome \(y\)</td></tr>
+            <tr><td>\(\lambda\in\Lambda\subseteq\mathbb R_+\)</td><td>robustness level; nested sets \(\lambda_1\le\lambda_2\Rightarrow\mathcal U_{\lambda_1}\subseteq\mathcal U_{\lambda_2}\)</td></tr>
+            <tr><td>\(\mathcal U_\lambda(X)\)</td><td>uncertainty set for \(Y\) at level \(\lambda\)</td></tr>
+            <tr><td>\(z^*_\lambda(X)\)</td><td>robust decision at level \(\lambda\)</td></tr>
+            <tr><td>\(I_\lambda,\ R_\lambda\)</td><td>miscoverage loss (0/1) and regret loss (\(\ge 0\))</td></tr>
+            <tr><td>\(\hat\alpha_I(\lambda),\ \hat\alpha_R(\lambda)\)</td><td>certified upper bounds on expected miscoverage / regret</td></tr>
+            <tr><td>\(n,\ B,\ \delta\)</td><td>calibration size, loss bound, failure probability</td></tr>
+            <tr><td>\(\hat\lambda\)</td><td>robustness level chosen post hoc from the frontier</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="formula-stack">
+        <article class="formula-block">
+          <h3>1. The robust decision</h3>
+          <p>For nested sets \(\mathcal U_\lambda(X)\), the robust decision minimizes the worst case inside the set:</p>
+          \[ z^*_\lambda(X) := \argmin_{z\in\mathcal Z}\ \max_{y\in\mathcal U_\lambda(X)} f(y,z) \]
+          <p>Its two failure modes are scored per observation:</p>
+          \[ I_\lambda(X,Y) := \mathbb 1[\,Y\notin\mathcal U_\lambda(X)\,],\qquad
+             R_\lambda(X,Y) := f(Y,z^*_\lambda(X)) - \min_{z\in\mathcal Z} f(Y,z) \]
+        </article>
+
+        <article class="formula-block">
+          <h3>2. What "certified" means</h3>
+          <p>An estimator is certified when it upper-bounds the true expected loss at every \(\lambda\) at once:</p>
+          \[ \hat\alpha_I(\lambda) \ge \mathbb E[I_\lambda(X,Y)],\qquad \hat\alpha_R(\lambda) \ge \mathbb E[R_\lambda(X,Y)] \]
+        </article>
+
+        <article class="formula-block">
+          <h3>3. The conformalized risk estimator</h3>
+          <p>Given a calibration average \(\bar\ell_n(\lambda)=\tfrac1n\sum_i \ell_\lambda(x_i,y_i)\) and loss bound
+            \(B\), the estimator inflates the empirical average by a worst-case correction for the unseen point:</p>
+          \[ \tilde\alpha_\ell(\lambda) = \frac{n}{n+1}\,\bar\ell_n(\lambda) + \frac{B}{n+1} \]
+          <p class="formula-note">This is the number the demo plots. No assumption on the distribution of \(Y\)
+            is needed, only exchangeability and a bounded loss.</p>
+        </article>
+
+        <article class="formula-block">
+          <h3>4. Validity, with a finite-sample rate</h3>
+          \[ \mathbb E[\hat\alpha_\ell(\lambda)] \ge \mathbb E[\ell_\lambda(X_{n+1},Y_{n+1})] \]
+          <p>and with probability at least \(1-\delta\) over an i.i.d. draw,</p>
+          \[ \big|\hat\alpha_\ell(\lambda) - \mathbb E[\ell_\lambda(X_{n+1},Y_{n+1})]\big|
+             \le \frac{B}{n+1}\left(\sqrt{\tfrac n2 \log\tfrac2\delta} + 2 + \tfrac1B\right) =: \epsilon \]
+        </article>
+
+        <article class="formula-block">
+          <h3>5. Why the curve is a frontier</h3>
+          <p>Under a mild monotonicity condition (shrinking \(\mathcal U_\lambda\) cannot raise the conditional
+            expected cost), the true risk pair is weakly decreasing in \(\lambda\):</p>
+          \[ \alpha_I(\lambda_1)\ge\alpha_I(\lambda_2),\qquad \alpha_R(\lambda_1)\le\alpha_R(\lambda_2)\quad(\lambda_1\le\lambda_2) \]
+          <p>so its image is exactly the Pareto frontier of the robust policy family. Because
+            \(\hat\alpha_I,\hat\alpha_R\) upper-bound the true values pointwise, the pruned lower-left envelope of
+            \(\{(\hat\alpha_I(\lambda),\hat\alpha_R(\lambda))\}\) is a certified (conservative but valid)
+            outer approximation of that frontier.</p>
+        </article>
+
+        <article class="formula-block">
+          <h3>6. Choosing \(\lambda\) after looking</h3>
+          <p>A decision-maker who picks \(\hat\lambda=\argmax_\lambda g(\hat\alpha_I(\lambda),\hat\alpha_R(\lambda))\)
+            after seeing the frontier breaks exchangeability, which can erode validity by a selection bias term
+            \(\Delta(g,\mathcal P)\). CREME restores it with a single split: the frontier shown for selection is
+            built from one half of the calibration data, and \(\hat\lambda\) is re-scored on the untouched other
+            half, which restores an exact finite-sample guarantee at the selected point.</p>
+        </article>
+      </div>
+
+      <div class="algo-block">
+        <h3>Algorithm 1 · CREME</h3>
+        <ol class="algo-steps">
+          <li><span class="algo-num">1</span><span class="algo-text">Split calibration data \(\mathcal D\) into \(\mathcal D_1,\mathcal D_2\).</span></li>
+          <li><span class="algo-num">2</span><span class="algo-text">For each \(\lambda\) on the grid, compute \(\hat\alpha_I(\lambda),\hat\alpha_R(\lambda)\) from \(\mathcal D_1\) via step 3's estimator.</span></li>
+          <li><span class="algo-num">3</span><span class="algo-text">Prune dominated points to form the pre-hoc frontier \(\hat{\mathcal F}^{(1)}\).</span></li>
+          <li><span class="algo-num">4</span><span class="algo-text">A decision-maker selects \(\hat\lambda\) from \(\hat{\mathcal F}^{(1)}\).</span></li>
+          <li><span class="algo-num">5</span><span class="algo-text">Recalibrate on \(\mathcal D_2\): report the post-hoc valid \(\big(\hat\alpha_I^{(2)}(\hat\lambda),\hat\alpha_R^{(2)}(\hat\lambda)\big)\).</span></li>
+        </ol>
+      </div>
+    </section>
+
 
     <section class="section results-section">
       <div class="section-heading">
@@ -393,6 +401,7 @@
         recalibration-after-selection analysis: <a href="paper.pdf">local PDF</a> &middot;
         <a href="https://arxiv.org/abs/2510.07750" target="_blank" rel="noopener noreferrer">arXiv:2510.07750</a>.</p>
     </section>
+    </div>
   </main>
 
   <footer class="footer">

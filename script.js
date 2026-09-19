@@ -1249,8 +1249,31 @@
     });
   }
 
+  /* ---------------- Page tabs: Demo | Explanation ---------------- */
+  // Section ids that live on the explanation panel; any other hash means the demo.
+  const EXPLANATION_IDS = ["explanation", "idea", "method", "citation"];
+  function panelForHash(hash) { return EXPLANATION_IDS.includes(hash.replace("#", "")) ? "explanation" : "demo"; }
+  function showPanel(name, scrollToId) {
+    document.querySelectorAll(".page-panel").forEach((el) => { el.hidden = el.id !== "panel-" + name; });
+    document.querySelectorAll(".page-tab").forEach((tab) => {
+      const active = tab.dataset.panel === name;
+      tab.classList.toggle("is-active", active);
+      tab.setAttribute("aria-selected", String(active));
+    });
+    // jump (not smooth-scroll) when the visible panel changes, so the new panel starts at its top
+    const target = scrollToId && document.getElementById(scrollToId);
+    if (target && scrollToId !== "explanation" && scrollToId !== "demo") target.scrollIntoView({ block: "start", behavior: "instant" });
+    else window.scrollTo({ top: 0, behavior: "instant" });
+  }
+  function wirePageTabs() {
+    const apply = () => { const id = location.hash.replace("#", ""); showPanel(panelForHash(location.hash), id); };
+    window.addEventListener("hashchange", apply);
+    apply();
+  }
+
   function init() {
     cacheEls();
+    wirePageTabs();
     document.querySelectorAll(".demo-tab").forEach((tab) => {
       tab.addEventListener("click", () => switchProblem(tab.dataset.problem));
     });
