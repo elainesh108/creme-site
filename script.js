@@ -293,6 +293,18 @@
     return best;
   }
 
+  // Plain-language explainer pieces shared by every problem tab.
+  function chainHTML(steps) {
+    return '<ol class="chain">' + steps.map((st, i) =>
+      `<li><span class="chain-num">${i + 1}</span><span><b>${st[0]}</b><small>${st[1]}</small></span></li>`).join("") + "</ol>";
+  }
+  function formulaToggleHTML(rows, whyTitle, whyBody) {
+    return '<details class="formula-toggle"><summary class="formula-read-title">Reading the formula, piece by piece</summary>' +
+      '<dl class="term-grid">' + rows.map((r) => `<dt>${r[0]}</dt><dd>${r[1]}</dd>`).join("") + "</dl>" +
+      `<details class="how-to"><summary>${whyTitle}</summary><div class="how-to-body">${whyBody}</div></details></details>`;
+  }
+  const FILLED_HOLLOW = String.raw`<li><b>Filled vs. hollow</b> tells you which half of the data a dot belongs to. Filled dots (\(\mathcal D_1\)) are used to draw the frontier and choose \(\hat\lambda\). Hollow dots (\(\mathcal D_2\)) are kept aside and only used afterwards, to double-check that choice fairly.</li>`;
+
   const LP = {
     id: "lp", label: "Linear programming",
     lambdaMax: 1,
@@ -328,6 +340,65 @@
     },
     formatZ(z) { return "(" + z[0].toFixed(2) + ", " + z[1].toFixed(2) + ")"; },
     objectiveHTML: "\\[ \\min_{z}\\ \\max_{y\\in\\mathcal U_\\lambda} y^\\top z = \\min_z\\ (\\mu+\\lambda\\mathbf 1)^\\top z \\quad \\text{s.t.}\\quad z \\in \\mathcal Z = \\operatorname{conv}\\{v_1,\\dots,v_m\\} \\subset \\mathbb R^2_+ \\]",
+    introHTML: String.raw`
+      <p class="problem-kicker">What problem is this?</p>
+      <h3>Splitting resources between two activities with uncertain payoffs</h3>
+      <p>You decide how much to put into activity 1 (\(z_1\)) and activity 2 (\(z_2\)), and you must commit
+        <em>before</em> the payoffs are known. Each unit of activity \(i\) has an uncertain cost \(y_i\), where a
+        negative cost is a profit. On average \(\mu=(-1.1,-1)\): a unit of activity 1 earns about 1.1 and a unit of
+        activity 2 about 1.0, but the realized values vary. Your constraints (budget, capacity) allow only the plans
+        inside the polygon \(\mathcal Z\). The question CREME answers: <b>how cautious should the plan be, and what
+        does that caution cost?</b></p>
+      <ol class="chain">
+        <li><span class="chain-num">1</span><span><b>Choose robustness \(\lambda\)</b><small>slider below</small></span></li>
+        <li><span class="chain-num">2</span><span><b>Decide which futures to protect against, \(\mathcal U_\lambda\)</b><small>Outcome space</small></span></li>
+        <li><span class="chain-num">3</span><span><b>Pick the robust plan \(z^*_\lambda\)</b><small>Decision space</small></span></li>
+        <li><span class="chain-num">4</span><span><b>Measure miscoverage and regret</b><small>Frontier &amp; stats</small></span></li>
+      </ol>`,
+    formulaHTML: String.raw`
+      <details class="formula-toggle">
+      <summary class="formula-read-title">Reading the formula, piece by piece</summary>
+      <dl class="term-grid">
+        <dt>\(y^\top z = y_1z_1+y_2z_2\)</dt><dd>The cost of plan \(z\) if the future turns out to be \(y\).</dd>
+        <dt>\(\max_{y\in\mathcal U_\lambda}\)</dt><dd>Don't trust a single forecast: find the <b>worst</b> future among those you chose to protect against.</dd>
+        <dt>\(\min_z\)</dt><dd>Among allowed plans, pick the one whose worst case is <b>best</b>. This is robust optimization.</dd>
+        <dt>\(\mathcal Z=\operatorname{conv}\{v_1,\dots,v_m\}\)</dt><dd>Every plan you're allowed to make: the shape you get by joining up the corner points \(v_i\) (the square handles). These are your limits, like budget or capacity. They are not data.</dd>
+        <dt>\((\mu+\lambda\mathbf 1)^\top z\)</dt><dd>The same worst-case cost, computed by plugging in the single worst future \(y^*=\mu+\lambda\mathbf 1\).</dd>
+      </dl>
+      <details class="how-to">
+        <summary>Why the max disappears</summary>
+        <div class="how-to-body">
+          <p>The uncertainty set is a box of half-width \(\lambda\) around the mean:</p>
+          \[ \mathcal U_\lambda=[\mu_1-\lambda,\ \mu_1+\lambda]\times[\mu_2-\lambda,\ \mu_2+\lambda]. \]
+          <p>Plans are nonnegative (\(z_1,z_2\ge 0\)), so raising \(y_1\) or \(y_2\) can only raise \(y_1z_1+y_2z_2\).
+            The worst point in the box is therefore always its upper-right corner, whatever \(z\) is:</p>
+          \[ y^*=(\mu_1+\lambda,\ \mu_2+\lambda)=\mu+\lambda\mathbf 1
+             \quad\Longrightarrow\quad \max_{y\in\mathcal U_\lambda} y^\top z=(\mu+\lambda\mathbf 1)^\top z. \]
+          <p>In words: the cautious planner assumes each activity earns \(\lambda\) less per unit than usual. What's
+            left is a cost that changes in straight lines across the plan, and with straight-line costs the best plan
+            is always at a corner of \(\mathcal Z\). That's why \(z^*_\lambda\) jumps from corner to corner as
+            \(\lambda\) changes.</p>
+        </div>
+      </details>
+      </details>`,
+    howTo: {
+      decision: String.raw`<ul>
+        <li>The axes are \(z_1, z_2\): every point is a <b>plan</b>, e.g. \(z=(0.8,0.3)\) puts 0.8 into activity 1 and 0.3 into activity 2.</li>
+        <li><b>Polygon \(\mathcal Z\)</b>: the allowed plans. Its <b>square handles</b> are the most extreme plans \(v_1,\dots,v_m\), and the shape joins them up. They are your limits (budget, capacity), not outcomes or data. <i>Vertices \(m\)</i> sets how many there are.</li>
+        <li><b>Drag a handle</b> to change your limits. The shape redraws itself; a handle dragged inside fades because it no longer shapes the edge. The robust plan, the regret and the whole frontier update too.</li>
+        <li><b>Shading</b>: the worst-case cost \((\mu+\lambda\mathbf 1)^\top z\) of each plan, light = low (good).</li>
+        <li><b>Amber point \(z^*_\lambda\)</b>: the robust plan, the lowest worst-case cost. Because cost changes in straight lines, the best plan is always at a corner. Move \(\lambda\) and watch it jump.</li>
+        <li><b>Hollow point</b>: a what-if plan you can drag. The readout above compares it with \(z^*_\lambda\). It does not affect the frontier.</li>
+      </ul>`,
+      outcome: String.raw`<ul>
+        <li>The axes are \(y_1, y_2\): every point is a <b>possible future</b>, the per-unit costs. You don't control these.</li>
+        <li><b>Shading</b>: where outcomes actually fall. Here \(Y\) is uniform on \(y_1\in[-2.1,-0.1]\), \(y_2\in[-2,0]\).</li>
+        <li><b>Amber box</b>: \(\mathcal U_\lambda=[\mu_1\pm\lambda]\times[\mu_2\pm\lambda]\), the futures you chose to protect against. It grows with \(\lambda\).</li>
+        ${FILLED_HOLLOW}
+        <li><b>Blue vs. red</b> says whether the point is covered. Inside the box: \(I_\lambda=\mathbb 1[Y\notin\mathcal U_\lambda]=0\). Outside: \(I_\lambda=1\), a <b>miscoverage</b>. Counting the red points is exactly how miscoverage is estimated (see readout).</li>
+        <li><b>Diamond \(y^*=\mu+\lambda\mathbf 1\)</b>: the worst corner of the box, the adversarial future the robust plan hedges against. It is constructed, not observed.</li>
+      </ul>`
+    },
     decisionSubtitle: "Drag a vertex \\(v_i\\) to reshape \\(\\mathcal Z\\), or drag the hollow marker to test a candidate \\(z\\). \\(z^*_\\lambda\\) is the vertex minimising \\(\\max_{y\\in\\mathcal U_\\lambda} y^\\top z\\).",
     drawDecision(ctx, w, h, state) {
       const padL = 34, padR = 16, padT = 16, padB = 30;
@@ -453,6 +524,54 @@
     // with p > c the cost is minimised at z = y, clamped to the feasible interval
     oracleCost(y) { return NEWS.costOfDecision([clamp(y.vec[0], NEWS.bounds[0], NEWS.bounds[1])], y); },
     objectiveHTML: "\\[ \\min_{z_{\\min}\\le z\\le z_{\\max}}\\ \\max_{y\\in\\mathcal U_\\lambda}\\big[-p\\min(y,z)+cz-v(z-y)^+\\big],\\quad (p,c,v)=(4,2,0) \\]",
+    introHTML: String.raw`
+      <p class="problem-kicker">What problem is this?</p>
+      <h3>How much stock to order before you know how many customers will come</h3>
+      <p>Every morning a newsstand orders \(z\) bundles of newspapers, <em>before</em> it knows how many people
+        will want one. Each bundle costs $2 and sells for $4; anything left over at night is thrown away. Tomorrow's
+        demand \(y\) is uncertain: somewhere between 1 and 3 bundles, 2 on average. Order too few and you turn
+        customers away; order too many and you pay for papers nobody buys. The question CREME answers: <b>how
+        cautious should the order be, and what does that caution cost?</b></p>` + chainHTML([
+        ["Choose robustness \\(\\lambda\\)", "slider below, or drag the amber order"],
+        ["Decide which demand levels to prepare for, \\(\\mathcal U_\\lambda=[2-\\lambda,\\,2+\\lambda]\\)", "Outcome space"],
+        ["Pick the cautious order \\(z^*_\\lambda\\)", "Decision space"],
+        ["Measure miscoverage and regret", "Frontier &amp; stats"]
+      ]),
+    formulaHTML: formulaToggleHTML([
+      ["\\(\\min(y,z)\\)", "Papers actually sold: you can't sell more than you stocked, or more than people want."],
+      ["\\(-p\\min(y,z)\\)", "Sales income at \\(p=\\$4\\) each. It has a minus sign because everything is written as a cost, and income lowers cost."],
+      ["\\(+cz\\)", "What you paid for the stock, \\(c=\\$2\\) per bundle."],
+      ["\\(-v(z-y)^+\\)", "Money back on leftovers, if any. Here \\(v=0\\): unsold papers are worth nothing."],
+      ["\\(\\max_{y\\in\\mathcal U_\\lambda}\\)", "Assume the <b>worst</b> demand among the levels you chose to prepare for."],
+      ["\\(\\min_{z_{\\min}\\le z\\le z_{\\max}}\\)", "Pick the order whose worst day is least bad, within your order limits."]
+    ], "Why the cautious order is \\(2-\\lambda\\)", String.raw`
+      <p>Fewer customers never helps you, so the worst demand you prepared for is the low end of the range,
+        \(y^*=2-\lambda\): a slow day. If you knew demand would be exactly that, you'd order exactly that much,
+        because every extra bundle costs $2 and would never sell. So the cautious order is</p>
+      \[ z^*_\lambda = 2-\lambda \qquad\text{(plan for a slow day)}. \]
+      <p>With \(\lambda=0\) you order the average, 2. With \(\lambda=0.5\) you order 1.5. More caution means a smaller,
+        safer order. If your order limits rule that out, the order sits at the nearest limit.</p>
+      <p><b>What regret looks like here.</b> Say you order 1.7. If customers want 2.5 bundles, you
+        missed 0.8 bundles that would each have made $2 profit: regret \(=1.6\). If they only want 1.2, you threw away
+        0.5 bundles at $2 each: regret \(=1.0\). Regret compares you with someone who knew the demand in advance.</p>`),
+    howTo: {
+      decision: String.raw`<ul>
+        <li>The horizontal axis is the <b>order size</b> \(z\). The curve shows the worst-case cost of each possible order: <b>lower is better</b>.</li>
+        <li><b>Why a V shape?</b> On the left, you order so little that you lose sales even on a slow day. On the right, you order more than a slow day needs and pay for papers that may not sell. The bottom of the V is the sweet spot.</li>
+        <li><b>Amber point \(z^*_\lambda\)</b>: the cautious order, at the bottom of the V. Drag it left or right: since each \(\lambda\) gives exactly one order, this also sets \(\lambda\).</li>
+        <li><b>Coloured strip</b>: the same worst-case cost shown as colour, light = low (good).</li>
+        <li><b>Tall grips</b> \(z_{\min}, z_{\max}\): the smallest and largest order you're allowed (say, a supplier minimum or shelf space). Drag them; if the ideal order falls outside, it sticks to the limit.</li>
+        <li><b>Hollow marker</b>: a what-if order you can drag. The readout above compares it with the cautious order. It does not affect the frontier.</li>
+      </ul>`,
+      outcome: String.raw`<ul>
+        <li>The line is <b>demand</b> \(y\), how many bundles customers want. Each dot is one past day. Dots are spread up and down only so they don't overlap; only their left-right position matters.</li>
+        <li><b>Grey shading</b>: where demand can land. Here every level between 1 and 3 is equally likely.</li>
+        <li><b>Amber band</b>: \(\mathcal U_\lambda=[2-\lambda,\,2+\lambda]\), the demand levels you decided to prepare for. It widens as \(\lambda\) grows.</li>
+        ${FILLED_HOLLOW}
+        <li><b>Blue vs. red</b>: a blue day fell inside the range you prepared for. A red day fell outside it, a <b>miscoverage</b>. The readout counts the red filled dots; that count is how miscoverage is estimated.</li>
+        <li><b>Diamond \(y^*=2-\lambda\)</b>: the slow day your order is planned around. It's the worst case inside the band, not a real observation.</li>
+      </ul>`
+    },
     decisionSubtitle: "Worst-case cost as a function of the order quantity \\(z\\), minimised at \\(z^*_\\lambda\\) (\\(\\mu-\\lambda\\) clamped to the feasible interval). Drag the amber marker to choose the order and set \\(\\lambda\\), the tall grips to set \\(z_{\\min}, z_{\\max}\\), or the hollow marker to test a candidate \\(z\\).",
     formatZ(z) { return z[0].toFixed(2); },
     defaultCandidate() { return [clamp(NEWS.mu[0], NEWS.bounds[0], NEWS.bounds[1])]; },
@@ -519,6 +638,56 @@
       return Math.min(PORT.costOfDecision([lo, 1 - lo], y), PORT.costOfDecision([hi, 1 - hi], y));
     },
     objectiveHTML: "\\[ \\min_{z_1+z_2=1,\\ \\ell\\le z_1\\le u}\\ -\\mu^\\top z + \\lambda\\Big(\\tfrac{z_1^2+z_2^2}{3}\\Big),\\quad \\mu=(2.15,1.85) \\]",
+    introHTML: String.raw`
+      <p class="problem-kicker">What problem is this?</p>
+      <h3>How to split your money between two investments</h3>
+      <p>You have one unit of money to divide between asset 1 and asset 2: \(z_1\) goes into asset 1 and
+        \(z_2=1-z_1\) into asset 2. You choose the split <em>before</em> you see the returns \(y=(y_1,y_2)\).
+        On average asset 1 pays more (\(\mu_1=2.15\) vs. \(\mu_2=1.85\)), but both returns swing up or down by as much
+        as 1. Putting everything in asset 1 earns the most on average, but it leaves you fully exposed if that asset has
+        a bad run. You may also have position limits \(\ell\le z_1\le u\). The question CREME answers: <b>how cautious
+        should the split be, and what does that caution cost?</b></p>` + chainHTML([
+        ["Choose robustness \\(\\lambda\\)", "slider below, or drag the amber split"],
+        ["Decide which return scenarios to prepare for, \\(\\mathcal U_\\lambda\\)", "Outcome space"],
+        ["Pick the cautious split \\(z^*_\\lambda\\)", "Decision space"],
+        ["Measure miscoverage and regret", "Frontier &amp; stats"]
+      ]),
+    formulaHTML: formulaToggleHTML([
+      ["\\(z_1+z_2=1\\)", "All the money is invested: whatever isn't in asset 1 is in asset 2."],
+      ["\\(\\ell\\le z_1\\le u\\)", "Position limits, e.g. \"never more than 80% in one asset\"."],
+      ["\\(\\mu^\\top z=\\mu_1z_1+\\mu_2z_2\\)", "Your average return. It has a minus sign because we minimize cost, so \\(-\\mu^\\top z\\) means <b>\"earn as much as possible on average\"</b>."],
+      ["\\(\\tfrac{z_1^2+z_2^2}{3}\\)", "A <b>concentration penalty</b>: largest when all the money is in one asset, smallest at a 50/50 split. It stands in for \"how badly could this go?\""],
+      ["\\(\\lambda\\)", "How much weight you give to that caution. At \\(\\lambda=0\\) you chase the average; larger \\(\\lambda\\) pushes you to spread your money."]
+    ], "Why the split moves the way it does", String.raw`
+      <p>The two terms pull in opposite directions. Average return says "put more in asset 1", which gains 0.30 for
+        each unit moved over. The penalty says "don't put all your eggs in one basket", and pulls harder as
+        \(\lambda\) grows. Balancing the two gives</p>
+      \[ z^*_1 = 0.5 + \frac{0.225}{\lambda}\quad\text{(capped at 1)}. \]
+      <p>So for \(\lambda\le 0.45\) everything goes into asset 1. Above that the split starts moving towards 50/50, reaching
+        about 73/27 at \(\lambda=1\). Position limits can stop it earlier.</p>
+      <p>This penalty is a simplified, smooth stand-in for the worst-case loss, chosen so the demo shows
+        diversification clearly. The coverage and regret on the right are still measured on actual returns.</p>
+      <p><b>What regret looks like here.</b> Looking back, the best split would have put everything (as far as your
+        limits allow) into whichever asset did better. Regret is the return you gave up compared with that perfect
+        hindsight.</p>`),
+    howTo: {
+      decision: String.raw`<ul>
+        <li>The horizontal axis is the <b>share in asset 1</b>, \(z_1\), from 0 (all in asset 2) to 1 (all in asset 1). The rest goes into asset 2.</li>
+        <li>The <b>curve</b> is the cautious cost of each split: <b>lower is better</b>. It slopes down towards asset 1 because asset 1 pays more on average; the penalty bends it back up as \(\lambda\) grows.</li>
+        <li><b>Amber point \(z^*_\lambda\)</b>: the cautious split, the lowest point of the curve within your limits. Drag it: each split corresponds to a \(\lambda\), so this also sets \(\lambda\).</li>
+        <li><b>Coloured strip</b>: the same cost shown as colour, light = low (good).</li>
+        <li><b>Tall grips</b> \(\ell, u\): the least and most you're allowed to hold in asset 1. Drag them; if the ideal split falls outside, it sticks to the limit.</li>
+        <li><b>Hollow marker</b>: a what-if split you can drag. The readout above compares it with the cautious split. It does not affect the frontier.</li>
+      </ul>`,
+      outcome: String.raw`<ul>
+        <li>The axes are the <b>returns</b> of asset 1 (\(y_1\)) and asset 2 (\(y_2\)). Each dot is one past period. You don't control these.</li>
+        <li><b>Grey shading</b>: where returns can land. Here \(y_1\) is anywhere from 1.15 to 3.15 and \(y_2\) from 0.85 to 2.85, all equally likely.</li>
+        <li><b>Amber box</b>: \(\mathcal U_\lambda\), the return scenarios you prepared for, where each return is within \(\lambda\) of its average. It grows with \(\lambda\).</li>
+        ${FILLED_HOLLOW}
+        <li><b>Blue vs. red</b>: a blue period's returns stayed inside the box. A red one fell outside it, a <b>miscoverage</b>. The readout counts the red filled dots; that count is how miscoverage is estimated.</li>
+        <li><b>Diamond \(y^*=\mu-\lambda\mathbf 1\)</b>: the bad scenario in the box, where both assets return \(\lambda\) less than average. It's constructed, not observed.</li>
+      </ul>`
+    },
     decisionSubtitle: "Objective along the two-asset simplex; \\(z^*_\\lambda\\) is its minimiser within the position limits \\(\\ell\\le z_1\\le u\\). Drag the amber marker to choose a split and set \\(\\lambda\\), the tall grips to set the limits, or the hollow marker to test a candidate split.",
     formatZ(z) { return "(" + z[0].toFixed(2) + ", " + z[1].toFixed(2) + ")"; },
     defaultCandidate() { const t = clamp(0.5, PORT.bounds[0], PORT.bounds[1]); return [t, 1 - t]; },
@@ -614,6 +783,56 @@
     costOfDecision(z, y) { return y.vec[z[0]]; },
     oracleCost(y) { return Math.min(...y.vec); },
     objectiveHTML: "\\[ \\min_{i\\in\\{A,B,C\\}}\\ \\mu_i + \\lambda\\, w_i,\\qquad \\mu_i = \\text{length of path } i,\\quad w=(1,2,3)\\ \\text{edges per path},\\quad \\text{each edge } \\pm 0.2 \\]",
+    introHTML: String.raw`
+      <p class="problem-kicker">What problem is this?</p>
+      <h3>Which route to take when travel times are uncertain</h3>
+      <p>You need to get from the source to the sink and must pick one of three routes <em>before</em> you know
+        today's traffic. Route A is one long winding road. Route B has 2 segments, and route C has 3. Every segment's
+        travel time can come in up to 0.2 faster or slower than usual. A route's usual time \(\mu_i\) is its drawn
+        length. With the starting map, C is shortest on a normal day, but it has the most segments that can go wrong.
+        The question CREME answers: <b>how cautious should the choice be, and what does that caution cost?</b></p>` + chainHTML([
+        ["Choose robustness \\(\\lambda\\)", "slider below"],
+        ["Decide how much delay to prepare for, \\(\\mathcal U_\\lambda\\)", "Outcome space"],
+        ["Pick the cautious route \\(z^*_\\lambda\\)", "Decision space"],
+        ["Measure miscoverage and regret", "Frontier &amp; stats"]
+      ]),
+    formulaHTML: formulaToggleHTML([
+      ["\\(i\\in\\{A,B,C\\}\\)", "Your decision is simply which route to take."],
+      ["\\(\\mu_i\\)", "The route's usual travel time, which is how long it's drawn. Drag the grey nodes to change it."],
+      ["\\(w_i\\)", "How many segments the route has: \\(w=(1,2,3)\\) for A, B, C."],
+      ["\\(\\lambda\\,w_i\\)", "The delay you budget for: \\(\\lambda\\) extra per segment. More segments mean more that can go wrong."],
+      ["\\(\\min_i\\)", "Pick the route with the best <b>usual time + delay budget</b>."]
+    ], "Why the best route changes with \\(\\lambda\\)", String.raw`
+      <p>Each route's cautious time is a straight line in \(\lambda\): it starts at the usual time \(\mu_i\) and rises by
+        \(w_i\) for every unit of \(\lambda\). Routes with more segments rise faster.</p>
+      <p>On the starting map, C has the shortest usual time (about 2.34), B is next (2.51) and A is longest (2.98).
+        But C's line rises three times as fast as A's. So:</p>
+      <ul>
+        <li>\(\lambda\) below about 0.17: <b>C</b>, the shortest route on a normal day.</li>
+        <li>\(\lambda\) between about 0.17 and 0.47: <b>B</b>, a middle ground.</li>
+        <li>\(\lambda\) above about 0.47: <b>A</b>, the long but predictable road.</li>
+      </ul>
+      <p>Drag the nodes and these switching points move. The tilt toward routes with fewer segments as \(\lambda\) grows
+        stays the same.</p>
+      <p><b>What regret looks like here.</b> Once today's times are known, regret is how much longer your route took
+        than the route that turned out fastest today.</p>`),
+    howTo: {
+      decision: String.raw`<ul>
+        <li>This panel is a small <b>map</b>: three roads from source to sink. Your decision is which one to take.</li>
+        <li><b>Road colour and label</b>: each route's cautious time, usual time + \(\lambda\) × segments. Light = low (good).</li>
+        <li><b>Amber glow \(z^*_\lambda\)</b>: the cautious route, the lowest label. Move \(\lambda\) and watch it switch.</li>
+        <li><b>Grey nodes</b> (and the <b>square</b> on road A): drag them to reshape the roads. Longer road = longer usual time. The frontier updates.</li>
+        <li><b>Click a road</b> to test it as a what-if (dotted purple). The readout above compares it with the cautious route. It does not affect the frontier.</li>
+      </ul>`,
+      outcome: String.raw`<ul>
+        <li>The axes are today's <b>total travel time</b> on route A (across) and route B (up). Each dot is one past day. Route C is checked too but not drawn, to keep the picture 2-D.</li>
+        <li><b>Grey shading</b>: where travel times can land. A, a single segment, is equally likely anywhere in its range. B adds up two segments whose delays often partly cancel, so its times bunch up in the middle.</li>
+        <li><b>Amber box</b>: \(\mathcal U_\lambda\), the days you prepared for, where each route's time is within \(\lambda\) of usual. It grows with \(\lambda\).</li>
+        ${FILLED_HOLLOW}
+        <li><b>Blue vs. red</b>: a blue day stayed inside what you prepared for. A red day fell outside it on at least one route, a <b>miscoverage</b>. The readout counts the red filled dots; that count is how miscoverage is estimated.</li>
+        <li><b>Diamond \(y^*\)</b>: the bad day the choice is guarding against, with your chosen route running \(\lambda\) slower than usual. It's constructed, not observed.</li>
+      </ul>`
+    },
     decisionSubtitle: "Each path coloured by its robust objective \\(\\mu_i+\\lambda w_i\\); \\(z^*_\\lambda\\) is the cheapest. Drag the grey nodes (or the bulge of road A) to change the path lengths; click a path to test it as a candidate.",
     formatZ(z) { return "path " + SP_NAMES[z[0]]; },
     defaultCandidate() { return SP.solve(0); },
@@ -773,7 +992,9 @@
       "ctrl-pref", "ctrl-pref-value", "btn-select", "btn-resample", "decision-canvas", "outcome-canvas",
       "frontier-svg", "stat-alpha-i", "stat-alpha-r", "stat-epsilon", "stat-post-ai", "stat-post-ar", "stat-pre-ai", "stat-pre-ar",
       "stat-lambda-hat", "demo-objective", "decision-heading", "decision-subtitle", "decision-legend",
-      "outcome-subtitle", "ro-z", "ro-obj", "ro-obj-star", "ro-reg", "ro-reg-star", "lp-vertex-ctl", "ctrl-vertices", "btn-reset-z"].forEach((id) => { els[id] = document.getElementById(id); });
+      "outcome-subtitle", "ro-z", "ro-obj", "ro-obj-star", "ro-reg", "ro-reg-star", "lp-vertex-ctl", "ctrl-vertices", "btn-reset-z",
+      "problem-intro", "formula-read", "howto-decision", "howto-decision-body", "howto-outcome", "howto-outcome-body",
+      "outcome-readout", "hint-n1", "hint-n2", "hint-conf"].forEach((id) => { els[id] = document.getElementById(id); });
   }
 
   function currentProblem() { return PROBLEMS[state.problemId]; }
@@ -849,11 +1070,19 @@
     els["decision-heading"].textContent = "Decision space";
     els["decision-subtitle"].innerHTML = problem.decisionSubtitle;
     els["decision-legend"].innerHTML = problem.legendHTML;
+    // Plain-language explainers; problems without them keep these blocks hidden.
+    const fill = (el, html) => { el.innerHTML = html || ""; el.hidden = !html; };
+    fill(els["problem-intro"], problem.introHTML);
+    fill(els["formula-read"], problem.formulaHTML);
+    const howTo = problem.howTo || {};
+    fill(els["howto-decision-body"], howTo.decision); els["howto-decision"].hidden = !howTo.decision;
+    fill(els["howto-outcome-body"], howTo.outcome); els["howto-outcome"].hidden = !howTo.outcome;
     els["outcome-subtitle"].innerHTML = problem.dims > 1
       ? "Data density, calibration draws, \\(\\mathcal U_\\lambda\\), and the worst case \\(y^*\\) that \\(z^*_\\lambda\\) hedges against (first two coordinates of \\(Y\\))."
       : "Data density, calibration draws, \\(\\mathcal U_\\lambda\\), and the worst case \\(y^*\\) that \\(z^*_\\lambda\\) hedges against, on the demand line.";
     if (window.MathJax && MathJax.typesetPromise) {
-      MathJax.typesetPromise([els["demo-objective"], els["decision-subtitle"], els["decision-legend"], els["outcome-subtitle"]]).catch(() => {});
+      MathJax.typesetPromise([els["demo-objective"], els["decision-subtitle"], els["decision-legend"], els["outcome-subtitle"],
+        els["problem-intro"], els["formula-read"], els["howto-decision-body"], els["howto-outcome-body"]]).catch(() => {});
     }
   }
 
@@ -1123,6 +1352,26 @@
       els["stat-pre-ai"].textContent = s.pre.aI.toFixed(3);
       els["stat-pre-ar"].textContent = s.pre.aR.toFixed(3);
     }
+    renderExplainers(cur);
+  }
+
+  // Live numbers in the control hints and the outcome-panel readout: count the
+  // D1 draws that escape U_lambda and show how that count becomes alpha_I-hat.
+  function renderExplainers(cur) {
+    const problem = currentProblem();
+    const n1 = state.calibD1.length, n2 = state.calibD2.length;
+    els["hint-n1"].textContent = String(n1);
+    els["hint-n2"].textContent = String(n2);
+    els["hint-conf"].textContent = String(Math.round((1 - state.delta) * 100));
+    const outside = (samples) => samples.reduce((k, y) => k + miscoverage(y, problem.mu, state.lambda), 0);
+    const k1 = outside(state.calibD1), k2 = outside(state.calibD2);
+    const ys = problem.worstCase(state.lambda, problem.solve(state.lambda));
+    const num = (v) => v.toFixed(2).replace("-", "\u2212");
+    els["outcome-readout"].innerHTML =
+      `Filled \u{1D49F}<sub>1</sub>: <b>${k1}</b> of ${n1} outside \u{1D4B0}<sub>\u03BB</sub>, empirical miscoverage <b>${n1 ? (k1 / n1).toFixed(2) : "\u2013"}</b>, ` +
+      `certified <i>\u03B1&#770;<sub>I</sub></i> = (${k1}+1)/(${n1}+1) = <b>${cur.aI.toFixed(3)}</b>. ` +
+      `Hollow \u{1D49F}<sub>2</sub>: <b>${k2}</b> of ${n2} outside. ` +
+      `Worst case <i>y</i>* = <b>(${ys.map(num).join(", ")})</b>.`;
   }
 
   function setStep(n) {

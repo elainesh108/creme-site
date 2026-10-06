@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Spectral:ital,wght@0,400;0,500;0,600;0,700;1,400&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=20260918d">
+<link rel="stylesheet" href="style.css?v=20261006c">
 <script>
   window.MathJax = {
     tex: {
@@ -21,7 +21,7 @@
   };
 </script>
 <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js" defer></script>
-<script src="script.js?v=20260918d" defer></script>
+<script src="script.js?v=20261006c" defer></script>
 </head>
 <body>
   <header class="site-header">
@@ -65,7 +65,11 @@
           <button class="demo-tab" data-problem="shortestpath" role="tab" aria-selected="false">Shortest path</button>
         </div>
 
+        <div class="problem-intro" id="problem-intro" hidden></div>
+
         <div class="objective-note" id="demo-objective"></div>
+
+        <div class="formula-read" id="formula-read" hidden></div>
 
         <form class="demo-controls" aria-label="Demo controls">
           <div class="demo-control-grid">
@@ -75,6 +79,7 @@
               </div>
               <input id="ctrl-lambda" type="range" min="0" max="1" step="0.005" value="0.3">
               <output id="ctrl-lambda-value" for="ctrl-lambda">0.30</output>
+              <p class="control-hint">How wide a range of futures the decision must withstand. Larger \(\lambda\) = bigger \(\mathcal U_\lambda\).</p>
             </div>
             <div class="control-group">
               <div class="control-label-row">
@@ -82,6 +87,7 @@
               </div>
               <input id="ctrl-n" type="range" min="6" max="60" step="2" value="20">
               <output id="ctrl-n-value" for="ctrl-n">20</output>
+              <p class="control-hint" id="hint-n">Split into \(n_1\) = <b id="hint-n1">10</b> to build the frontier and \(n_2\) = <b id="hint-n2">10</b> to recheck \(\hat\lambda\).</p>
             </div>
             <div class="control-group">
               <div class="control-label-row">
@@ -89,6 +95,7 @@
               </div>
               <input id="ctrl-delta" type="range" min="0.05" max="0.3" step="0.05" value="0.1">
               <output id="ctrl-delta-value" for="ctrl-delta">0.10</output>
+              <p class="control-hint">The bound \(\epsilon\) holds with <b id="hint-conf">90</b>% confidence. Changes only \(\epsilon\), not the decision.</p>
             </div>
             <div class="control-group control-wide">
               <div class="control-label-row">
@@ -96,6 +103,7 @@
               </div>
               <input id="ctrl-pref" type="range" min="0" max="1" step="0.02" value="0.5">
               <output id="ctrl-pref-value" for="ctrl-pref">balanced</output>
+              <p class="control-hint">Doesn't change the optimization problem. It picks the point \(\hat\lambda\) on the frontier that best fits this trade-off.</p>
             </div>
             <div class="control-group control-action">
               <button class="control-button" id="btn-select" type="button">Set \(\lambda \leftarrow \hat\lambda\)</button>
@@ -109,6 +117,7 @@
         <div class="demo-grid">
           <article class="demo-panel">
             <div class="demo-panel-heading">
+              <p class="panel-question">What can I choose? <span>Each point is a decision \(z\).</span></p>
               <h3 id="decision-heading">Decision space</h3>
               <p id="decision-subtitle">Objective value over the feasible set and its minimiser \(z^*_\lambda\).</p>
             </div>
@@ -128,10 +137,15 @@
               (vs. <b id="ro-obj-star">&ndash;</b> at \(z^*_\lambda\)); certified regret
               \(\hat\alpha_R\) <b id="ro-reg">&ndash;</b> (vs. <b id="ro-reg-star">&ndash;</b>).
             </p>
+            <details class="how-to" id="howto-decision" hidden>
+              <summary>How to read this</summary>
+              <div class="how-to-body" id="howto-decision-body"></div>
+            </details>
           </article>
 
           <article class="demo-panel">
             <div class="demo-panel-heading">
+              <p class="panel-question">What might happen? <span>Each point is a possible outcome \(y\).</span></p>
               <h3>Outcome space</h3>
               <p id="outcome-subtitle">Calibration draws vs. \(\mathcal U_\lambda\).</p>
             </div>
@@ -144,10 +158,16 @@
               <span><i class="legend-dot hollow"></i>held-out \(\mathcal D_2\)</span>
               <span><i class="legend-diamond"></i>worst case \(y^*=\argmax_{y\in\mathcal U_\lambda} f(y,z^*_\lambda)\)</span>
             </div>
+            <p class="decision-readout outcome-readout" id="outcome-readout"></p>
+            <details class="how-to" id="howto-outcome" hidden>
+              <summary>How to read this</summary>
+              <div class="how-to-body" id="howto-outcome-body"></div>
+            </details>
           </article>
 
           <article class="demo-panel frontier-panel">
             <div class="demo-panel-heading">
+              <p class="panel-question">Was this \(\lambda\) worth it? <span>Each point is one robustness level \(\lambda\).</span></p>
               <h3>Miscoverage &ndash; regret frontier</h3>
               <p>Amber follows \(\lambda\) along the \(\mathcal D_1\) curve; the preference line is tangent to the pre-hoc frontier at \(\hat\lambda\), which is then re-scored on \(\mathcal D_2\). The certified curves stop at \(\hat\alpha_I = 1/(n_1+1)\): the \(B/(n+1)\) term of the estimator means finite data can never certify zero miscoverage.</p>
             </div>
@@ -161,6 +181,21 @@
               <span><i class="legend-dot lambdahat"></i>\(\hat\lambda\) pre-hoc</span>
               <span><i class="legend-dot posthoc"></i>\(\hat\lambda\) post-hoc</span>
             </div>
+            <details class="how-to" id="howto-frontier">
+              <summary>How to read this</summary>
+              <div class="how-to-body">
+                <ul>
+                  <li>A point here is not a decision or an outcome. It is a <b>whole robustness level</b> \(\lambda\), summarized by two numbers.</li>
+                  <li><b>Horizontal axis:</b> certified miscoverage \(\hat\alpha_I(\lambda)\), an upper bound on how often the real outcome falls outside \(\mathcal U_\lambda\): \(\Pr[Y\notin\mathcal U_\lambda]\).</li>
+                  <li><b>Vertical axis:</b> certified regret \(\hat\alpha_R(\lambda)\), an upper bound on the average regret
+                    \[ R_\lambda(Y) = f(Y,z^*_\lambda) - \min_{z\in\mathcal Z} f(Y,z), \]
+                    i.e. how much worse the robust decision does than the best decision in hindsight.</li>
+                  <li>Raising \(\lambda\) moves the amber point <b>left</b> (fewer outcomes escape the set) and usually <b>up</b> (a more cautious decision gives up more when things go well). The curve is the price of safety.</li>
+                  <li>Both numbers add a small safety margin for having only limited data, \(\tfrac{n_1}{n_1+1}\bar\ell + \tfrac{B}{n_1+1}\) instead of the plain average \(\bar\ell\). That's why the curves never reach zero miscoverage: they stop at \(1/(n_1+1)\).</li>
+                  <li>The preference line picks \(\hat\lambda\) on the \(\mathcal D_1\) curve. Picking after looking would flatter the choice, so the green point re-scores that same \(\hat\lambda\) on the unused \(\mathcal D_2\) data. That gives an honest guarantee.</li>
+                </ul>
+              </div>
+            </details>
           </article>
         </div>
 
