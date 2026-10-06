@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Spectral:ital,wght@0,400;0,500;0,600;0,700;1,400&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=20261006c">
+<link rel="stylesheet" href="style.css?v=20261006e">
 <script>
   window.MathJax = {
     tex: {
@@ -21,7 +21,7 @@
   };
 </script>
 <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js" defer></script>
-<script src="script.js?v=20261006c" defer></script>
+<script src="script.js?v=20261006e" defer></script>
 </head>
 <body>
   <header class="site-header">
@@ -123,6 +123,7 @@
             </div>
             <canvas id="decision-canvas" width="360" height="300" aria-label="Decision space: drag the vertices or the candidate decision"></canvas>
             <div class="panel-tools">
+              <span class="drag-hint"><i></i>Red = you can drag it</span>
               <span class="panel-tools-group" id="lp-vertex-ctl">
                 <label for="ctrl-vertices">Vertices \(m\)</label>
                 <select id="ctrl-vertices" aria-label="Number of vertices">
@@ -169,7 +170,7 @@
             <div class="demo-panel-heading">
               <p class="panel-question">Was this \(\lambda\) worth it? <span>Each point is one robustness level \(\lambda\).</span></p>
               <h3>Miscoverage &ndash; regret frontier</h3>
-              <p>Amber follows \(\lambda\) along the \(\mathcal D_1\) curve; the preference line is tangent to the pre-hoc frontier at \(\hat\lambda\), which is then re-scored on \(\mathcal D_2\). The certified curves stop at \(\hat\alpha_I = 1/(n_1+1)\): the \(B/(n+1)\) term of the estimator means finite data can never certify zero miscoverage.</p>
+              <p>Each point is one \(\lambda\): how often reality escapes what you prepared for (across) vs. what that caution costs (up). Amber is your current \(\lambda\); the green dot is the recommended \(\hat\lambda\), double-checked.</p>
             </div>
             <svg id="frontier-svg" viewBox="0 0 360 300" role="img" aria-label="Pareto frontier plot"></svg>
             <div class="demo-legend">
@@ -183,18 +184,7 @@
             </div>
             <details class="how-to" id="howto-frontier">
               <summary>How to read this</summary>
-              <div class="how-to-body">
-                <ul>
-                  <li>A point here is not a decision or an outcome. It is a <b>whole robustness level</b> \(\lambda\), summarized by two numbers.</li>
-                  <li><b>Horizontal axis:</b> certified miscoverage \(\hat\alpha_I(\lambda)\), an upper bound on how often the real outcome falls outside \(\mathcal U_\lambda\): \(\Pr[Y\notin\mathcal U_\lambda]\).</li>
-                  <li><b>Vertical axis:</b> certified regret \(\hat\alpha_R(\lambda)\), an upper bound on the average regret
-                    \[ R_\lambda(Y) = f(Y,z^*_\lambda) - \min_{z\in\mathcal Z} f(Y,z), \]
-                    i.e. how much worse the robust decision does than the best decision in hindsight.</li>
-                  <li>Raising \(\lambda\) moves the amber point <b>left</b> (fewer outcomes escape the set) and usually <b>up</b> (a more cautious decision gives up more when things go well). The curve is the price of safety.</li>
-                  <li>Both numbers add a small safety margin for having only limited data, \(\tfrac{n_1}{n_1+1}\bar\ell + \tfrac{B}{n_1+1}\) instead of the plain average \(\bar\ell\). That's why the curves never reach zero miscoverage: they stop at \(1/(n_1+1)\).</li>
-                  <li>The preference line picks \(\hat\lambda\) on the \(\mathcal D_1\) curve. Picking after looking would flatter the choice, so the green point re-scores that same \(\hat\lambda\) on the unused \(\mathcal D_2\) data. That gives an honest guarantee.</li>
-                </ul>
-              </div>
+              <div class="how-to-body" id="howto-frontier-body"></div>
             </details>
           </article>
         </div>

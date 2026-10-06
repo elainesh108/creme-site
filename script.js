@@ -53,6 +53,39 @@
     ctx.fillStyle = fill; ctx.fill();
     ctx.strokeStyle = stroke; ctx.lineWidth = 1.2; ctx.stroke();
   }
+  // Anything the reader can drag is drawn in DRAG red on a soft halo, and wears a
+  // red "drag" tag until the first drag on that tab.
+  const DRAG = "#d7263d";
+  function dragHalo(ctx, x, y, r, hot) {
+    ctx.beginPath(); ctx.arc(x, y, r + (hot ? 8 : 5), 0, 2 * Math.PI);
+    ctx.fillStyle = hot ? "rgba(215,38,61,0.30)" : "rgba(215,38,61,0.15)"; ctx.fill();
+  }
+  function dragRing(ctx, x, y, r, hot) { dragHalo(ctx, x, y, r, hot); ring(ctx, x, y, r, DRAG); }
+  // Pill labels; a tag that would overlap an earlier one is nudged upwards.
+  function drawDragTags(ctx, tags, w, h) {
+    ctx.font = "600 10px " + FONT_UI;
+    const placed = [], th = 15;
+    const hits = (x, y, tw) => placed.some((q) => x < q.x + q.w + 2 && x + tw + 2 > q.x && y < q.y + th + 2 && y + th + 2 > q.y);
+    tags.forEach((t) => {
+      const tw = ctx.measureText(t.text).width + 12;
+      let x = t.align === "left" ? t.x : t.align === "right" ? t.x - tw : t.x - tw / 2;
+      let y = t.y - th / 2;
+      x = clamp(x, 3, w - tw - 3);
+      for (let k = 0; k < 6 && hits(x, y, tw); k++) y -= th + 3;
+      y = clamp(y, 3, h - th - 3);
+      placed.push({ x, y, w: tw });
+      roundRectPath(ctx, x, y, tw, th, th / 2);
+      ctx.fillStyle = DRAG; ctx.fill();
+      ctx.fillStyle = "#fff"; ctx.textAlign = "left"; ctx.textBaseline = "middle";
+      ctx.fillText(t.text, x + 6, y + th / 2 + 0.5);
+      ctx.textBaseline = "alphabetic";
+    });
+  }
+  function isHover(hover, type, extra) {
+    if (!hover || hover.type !== type) return false;
+    return !extra || Object.keys(extra).every((k) => hover[k] === extra[k]);
+  }
+
   function label(ctx, text, x, y, color, align, font) {
     ctx.fillStyle = color || INK; ctx.font = font || ("10px " + FONT_UI); ctx.textAlign = align || "center";
     ctx.fillText(text, x, y);
@@ -141,7 +174,7 @@
 
   /* One-dimensional decision space: objective curve + gradient strip + minimiser. */
   function draw1DDecision(ctx, w, h, opts) {
-    const { zMin, zMax, objective, zStar, candidate, bounds, xLabel, objLabel, ticks, fmtTick } = opts;
+    const { zMin, zMax, objective, zStar, candidate, bounds, xLabel, objLabel, ticks, fmtTick, hover } = opts;
     const padL = 36, padR = 22, curveTop = 30, curveBot = 172, stripY = 206, stripH = 26;
     const sx = (z) => padL + ((z - zMin) / (zMax - zMin)) * (w - padL - padR);
     const N = 240, vals = [];
@@ -165,11 +198,13 @@
     ctx.strokeRect(sx(zMin), stripY, sx(zMax) - sx(zMin), stripH);
     // limit grips: a tall rounded bar with a ridged knob, easy to grab
     const gripTop = stripY - 8, gripBot = stripY + stripH + 8;
-    [bLo, bHi].forEach((b) => {
-      const x = sx(b);
-      ctx.fillStyle = "#fbfbf7"; ctx.strokeStyle = ACCENT; ctx.lineWidth = 1.6;
+    [bLo, bHi].forEach((b, k) => {
+      const x = sx(b), hot = isHover(hover, k ? "hi" : "lo"), pad = hot ? 9 : 6;
+      roundRectPath(ctx, x - 5 - pad, gripTop - pad, 10 + 2 * pad, gripBot - gripTop + 2 * pad, 8);
+      ctx.fillStyle = hot ? "rgba(215,38,61,0.30)" : "rgba(215,38,61,0.15)"; ctx.fill();
+      ctx.fillStyle = "#fbfbf7"; ctx.strokeStyle = DRAG; ctx.lineWidth = 1.8;
       roundRectPath(ctx, x - 5, gripTop, 10, gripBot - gripTop, 4); ctx.fill(); ctx.stroke();
-      ctx.strokeStyle = "rgba(36,66,90,0.55)"; ctx.lineWidth = 1;
+      ctx.strokeStyle = DRAG; ctx.lineWidth = 1;
       [-3, 0, 3].forEach((d) => { ctx.beginPath(); ctx.moveTo(x - 2, stripY + stripH / 2 + d); ctx.lineTo(x + 2, stripY + stripH / 2 + d); ctx.stroke(); });
     });
     ticks.forEach((t) => {
@@ -198,11 +233,12 @@
     // draggable candidate decision
     if (candidate !== undefined) {
       const cx = sx(candidate), cv = objective(candidate);
-      ctx.setLineDash([2, 3]); ctx.strokeStyle = PREF; ctx.lineWidth = 1;
+      const hot = isHover(hover, "candidate");
+      ctx.setLineDash([2, 3]); ctx.strokeStyle = DRAG; ctx.lineWidth = 1;
       ctx.beginPath(); ctx.moveTo(cx, sy(cv)); ctx.lineTo(cx, stripY + stripH); ctx.stroke();
       ctx.setLineDash([]);
-      ring(ctx, cx, sy(cv), 5, PREF);
-      ring(ctx, cx, stripY + stripH / 2, 7, PREF);
+      dragRing(ctx, cx, sy(cv), 5, hot);
+      dragRing(ctx, cx, stripY + stripH / 2, 7, hot);
     }
 
     // minimiser (draggable: sets lambda)
@@ -210,10 +246,22 @@
     ctx.setLineDash([3, 3]); ctx.strokeStyle = BRASS_DARK; ctx.lineWidth = 1;
     ctx.beginPath(); ctx.moveTo(sx(zStar), sy(vStar)); ctx.lineTo(sx(zStar), stripY + stripH); ctx.stroke();
     ctx.setLineDash([]);
-    dot(ctx, sx(zStar), sy(vStar), 6, BRASS, BRASS_DARK);
-    dot(ctx, sx(zStar), stripY + stripH / 2, 7, BRASS, BRASS_DARK);
+    // amber keeps its meaning (the current lambda); the red halo and ring say "draggable"
+    const hotStar = isHover(hover, "zstar");
+    [[sy(vStar), 6], [stripY + stripH / 2, 7]].forEach(([y, r]) => {
+      dragHalo(ctx, sx(zStar), y, r + 1, hotStar);
+      dot(ctx, sx(zStar), y, r, BRASS, BRASS_DARK);
+      ctx.beginPath(); ctx.arc(sx(zStar), y, r + 2.5, 0, 2 * Math.PI);
+      ctx.strokeStyle = DRAG; ctx.lineWidth = 1.6; ctx.stroke();
+    });
+    const candRight = candidate === undefined || candidate >= zStar;
+    const tags = [{ text: "drag to set \u03BB", x: sx(zStar) + (candRight ? -13 : 13), y: sy(vStar), align: candRight ? "right" : "left" }];
+    if (candidate !== undefined) {
+      tags.push({ text: "what-if: drag", x: sx(candidate) + (candRight ? 13 : -13), y: sy(objective(candidate)), align: candRight ? "left" : "right" });
+    }
+    tags.push({ text: "drag limit", x: sx(bLo), y: gripBot + 22 }, { text: "drag limit", x: sx(bHi), y: gripBot + 22 });
     const iz = (px) => Math.min(zMax, Math.max(zMin, zMin + ((px - padL) / (w - padL - padR)) * (zMax - zMin)));
-    return { sx, sy, iz, stripY, stripH, curveTop, curveBot, padL, padR, candidateY: stripY + stripH / 2, gripTop, gripBot, zMin, zMax, zStar, zStarCurveY: sy(vStar) };
+    return { tags, sx, sy, iz, stripY, stripH, curveTop, curveBot, padL, padR, candidateY: stripY + stripH / 2, gripTop, gripBot, zMin, zMax, zStar, zStarCurveY: sy(vStar) };
   }
 
   // Hit tolerances are given in screen pixels; the canvas is drawn at 360 logical
@@ -303,10 +351,33 @@
       '<dl class="term-grid">' + rows.map((r) => `<dt>${r[0]}</dt><dd>${r[1]}</dd>`).join("") + "</dl>" +
       `<details class="how-to"><summary>${whyTitle}</summary><div class="how-to-body">${whyBody}</div></details></details>`;
   }
+  function frontierHowToHTML(note) {
+    return String.raw`<p class="shape-why"><b>Why it slopes down.</b> Every point on this chart is one setting of
+        \(\lambda\). Turn \(\lambda\) up and two things happen at once. The set of futures you prepare for gets bigger, so
+        fewer real outcomes fall outside it: the point moves <b>left</b>. And your decision gets more cautious, so
+        on ordinary days you leave more on the table: the point moves <b>up</b>. Turn \(\lambda\) down and the
+        opposite happens. So the points line up from the <b>top left</b> (very cautious: rarely surprised, but often
+        over-prepared) to the <b>bottom right</b> (not cautious: often surprised, but lean). You can't have both low
+        miscoverage and low regret; the curve is the exchange rate between them.</p>
+      <p class="shape-why"><b>Why it moves in steps.</b> The certified curves are built from a handful of past
+        outcomes. Miscoverage only changes when a dot crosses the edge of the set, one dot at a time, and regret only
+        changes when the decision itself changes. In between, the curve runs flat.</p>
+      <p class="shape-why"><b>On this tab.</b> ` + note + String.raw`</p>
+      <ul>
+        <li><b>Across:</b> certified miscoverage \(\hat\alpha_I(\lambda)\), a guaranteed upper bound on how often the real outcome lands outside what you prepared for.</li>
+        <li><b>Up:</b> certified regret \(\hat\alpha_R(\lambda)\), a guaranteed upper bound on the average regret
+          \[ R_\lambda(Y) = f(Y,z^*_\lambda) - \min_{z\in\mathcal Z} f(Y,z), \]
+          i.e. how much worse your cautious decision did than the best decision in hindsight.</li>
+        <li><b>Dashed grey curve:</b> the "true" trade-off, computed from thousands of samples. The solid curves use only your \(n\) data points plus a small safety margin, \(\tfrac{n_1}{n_1+1}\bar\ell + \tfrac{B}{n_1+1}\), so they usually sit a little above and to the right of it. That gap is the price of a guarantee, and it shrinks as \(n\) grows. The margin is also why the solid curves stop at \(1/(n_1+1)\) instead of reaching zero.</li>
+        <li><b>Choosing \(\hat\lambda\):</b> picture the dashed purple line as a ruler slid in from the bottom-left corner until it just touches the curve. The touching point is \(\hat\lambda\). The preference slider tilts the ruler: flatter favours low regret, steeper favours low miscoverage.</li>
+        <li><b>Green point:</b> choosing after looking would flatter the choice, so that same \(\hat\lambda\) is re-scored on the unused \(\mathcal D_2\) data. That gives an honest guarantee.</li>
+      </ul>`;
+  }
   const FILLED_HOLLOW = String.raw`<li><b>Filled vs. hollow</b> tells you which half of the data a dot belongs to. Filled dots (\(\mathcal D_1\)) are used to draw the frontier and choose \(\hat\lambda\). Hollow dots (\(\mathcal D_2\)) are kept aside and only used afterwards, to double-check that choice fairly.</li>`;
 
   const LP = {
     id: "lp", label: "Linear programming",
+    frontierNote: String.raw`The robust plan always sits on a corner, so as \(\lambda\) grows it stays put for a while and then jumps to the next corner. While it stays put, regret doesn't change at all and the curve runs <b>flat</b>; each jump is a <b>step up</b> in regret.`,
     lambdaMax: 1,
     mu: [-1.1, -1],
     dims: 2,
@@ -362,7 +433,7 @@
         <dt>\(y^\top z = y_1z_1+y_2z_2\)</dt><dd>The cost of plan \(z\) if the future turns out to be \(y\).</dd>
         <dt>\(\max_{y\in\mathcal U_\lambda}\)</dt><dd>Don't trust a single forecast: find the <b>worst</b> future among those you chose to protect against.</dd>
         <dt>\(\min_z\)</dt><dd>Among allowed plans, pick the one whose worst case is <b>best</b>. This is robust optimization.</dd>
-        <dt>\(\mathcal Z=\operatorname{conv}\{v_1,\dots,v_m\}\)</dt><dd>Every plan you're allowed to make: the shape you get by joining up the corner points \(v_i\) (the square handles). These are your limits, like budget or capacity. They are not data.</dd>
+        <dt>\(\mathcal Z=\operatorname{conv}\{v_1,\dots,v_m\}\)</dt><dd>Every plan you're allowed to make: the shape you get by joining up the corner points \(v_i\) (the red square handles). These are your limits, like budget or capacity. They are not data.</dd>
         <dt>\((\mu+\lambda\mathbf 1)^\top z\)</dt><dd>The same worst-case cost, computed by plugging in the single worst future \(y^*=\mu+\lambda\mathbf 1\).</dd>
       </dl>
       <details class="how-to">
@@ -382,24 +453,33 @@
       </details>
       </details>`,
     howTo: {
-      decision: String.raw`<ul>
+      decision: String.raw`<p class="shape-why"><b>Why it looks like this.</b> On average both activities make money, so doing more of
+        either lowers your cost: the shading gets <b>darker (better) towards the upper right</b>. Cost changes in
+        straight lines, so the shading runs in straight bands, and the best plan is always the corner those bands
+        point to. As \(\lambda\) grows, the cautious planner trims both payoffs by \(\lambda\). Activity 2 earns
+        less to begin with, so it is the first to look worthless: the bands turn, and \(z^*_\lambda\) slides towards
+        corners with more of activity 1.</p>
+      <ul>
         <li>The axes are \(z_1, z_2\): every point is a <b>plan</b>, e.g. \(z=(0.8,0.3)\) puts 0.8 into activity 1 and 0.3 into activity 2.</li>
-        <li><b>Polygon \(\mathcal Z\)</b>: the allowed plans. Its <b>square handles</b> are the most extreme plans \(v_1,\dots,v_m\), and the shape joins them up. They are your limits (budget, capacity), not outcomes or data. <i>Vertices \(m\)</i> sets how many there are.</li>
-        <li><b>Drag a handle</b> to change your limits. The shape redraws itself; a handle dragged inside fades because it no longer shapes the edge. The robust plan, the regret and the whole frontier update too.</li>
-        <li><b>Shading</b>: the worst-case cost \((\mu+\lambda\mathbf 1)^\top z\) of each plan, light = low (good).</li>
-        <li><b>Amber point \(z^*_\lambda\)</b>: the robust plan, the lowest worst-case cost. Because cost changes in straight lines, the best plan is always at a corner. Move \(\lambda\) and watch it jump.</li>
-        <li><b>Hollow point</b>: a what-if plan you can drag. The readout above compares it with \(z^*_\lambda\). It does not affect the frontier.</li>
+        <li><b>Red squares</b>: the most extreme plans \(v_1,\dots,v_m\). The shape joining them, \(\mathcal Z\), is every plan you're allowed. They are your limits (budget, capacity), not data. <i>Vertices \(m\)</i> sets how many there are.</li>
+        <li><b>Drag a red square</b> to change your limits. The shape redraws itself (a square dragged inside fades, because it no longer shapes the edge), and the robust plan, the regret and the frontier all update.</li>
+        <li><b>Amber point \(z^*_\lambda\)</b>: the robust plan, the darkest corner. Move \(\lambda\) and watch it jump from corner to corner.</li>
+        <li><b>Red ring</b>: a what-if plan you can drag. The readout above compares it with \(z^*_\lambda\). It does not affect the frontier.</li>
       </ul>`,
-      outcome: String.raw`<ul>
+      outcome: String.raw`<p class="shape-why"><b>Why it looks like this.</b> The grey rectangle is everywhere the per-unit costs can
+        land, all equally likely, so the dots scatter evenly across it. The amber box is centred on the average
+        \(\mu\) and reaches \(\lambda\) out in every direction. A small box leaves most dots outside: lots of
+        surprises. Turn \(\lambda\) up and the box swallows more of them. <b>The share of dots outside the box is
+        the miscoverage</b> plotted on the right.</p>
+      <ul>
         <li>The axes are \(y_1, y_2\): every point is a <b>possible future</b>, the per-unit costs. You don't control these.</li>
-        <li><b>Shading</b>: where outcomes actually fall. Here \(Y\) is uniform on \(y_1\in[-2.1,-0.1]\), \(y_2\in[-2,0]\).</li>
-        <li><b>Amber box</b>: \(\mathcal U_\lambda=[\mu_1\pm\lambda]\times[\mu_2\pm\lambda]\), the futures you chose to protect against. It grows with \(\lambda\).</li>
+        <li><b>Amber box</b>: \(\mathcal U_\lambda=[\mu_1\pm\lambda]\times[\mu_2\pm\lambda]\), the futures you chose to protect against.</li>
         ${FILLED_HOLLOW}
-        <li><b>Blue vs. red</b> says whether the point is covered. Inside the box: \(I_\lambda=\mathbb 1[Y\notin\mathcal U_\lambda]=0\). Outside: \(I_\lambda=1\), a <b>miscoverage</b>. Counting the red points is exactly how miscoverage is estimated (see readout).</li>
-        <li><b>Diamond \(y^*=\mu+\lambda\mathbf 1\)</b>: the worst corner of the box, the adversarial future the robust plan hedges against. It is constructed, not observed.</li>
+        <li><b>Blue vs. red</b>: blue dots are inside the box (covered). Red dots are outside it, a <b>miscoverage</b>: \(I_\lambda=\mathbb 1[Y\notin\mathcal U_\lambda]=1\). The readout counts the red filled dots.</li>
+        <li><b>Diamond \(y^*=\mu+\lambda\mathbf 1\)</b>: the worst corner of the box, the bad future the robust plan hedges against. It is constructed, not observed.</li>
       </ul>`
     },
-    decisionSubtitle: "Drag a vertex \\(v_i\\) to reshape \\(\\mathcal Z\\), or drag the hollow marker to test a candidate \\(z\\). \\(z^*_\\lambda\\) is the vertex minimising \\(\\max_{y\\in\\mathcal U_\\lambda} y^\\top z\\).",
+    decisionSubtitle: "Darker = lower worst-case cost. The amber dot \\(z^*_\\lambda\\) is the best plan. Drag the red corners to change what's allowed, or the red ring to try another plan.",
     drawDecision(ctx, w, h, state) {
       const padL = 34, padR = 16, padT = 16, padB = 30;
       const hull = LP.hull();
@@ -449,19 +529,29 @@
       LP.vertices.forEach((v, i) => {
         const onHull = LP.hullIdx.includes(i);
         const x = sx(v[0]), y = sy(v[1]);
+        if (onHull) dragHalo(ctx, x, y, 5, isHover(state.hover, "vertex", { index: i }));
         ctx.fillStyle = onHull ? "#fbfbf7" : "rgba(251,251,247,0.6)";
-        ctx.strokeStyle = onHull ? ACCENT : "rgba(87,102,106,0.6)"; ctx.lineWidth = 1.6;
-        ctx.beginPath(); ctx.rect(x - 4.5, y - 4.5, 9, 9); ctx.fill(); ctx.stroke();
+        ctx.strokeStyle = onHull ? DRAG : "rgba(215,38,61,0.45)"; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.rect(x - 5, y - 5, 10, 10); ctx.fill(); ctx.stroke();
       });
 
       // candidate decision
       const c = state.candidate;
-      if (c) ring(ctx, sx(c[0]), sy(c[1]), 7, PREF);
+      if (c) dragRing(ctx, sx(c[0]), sy(c[1]), 7, isHover(state.hover, "candidate"));
 
       const z = state.z;
       dot(ctx, sx(z[0]), sy(z[1]), 6, BRASS, BRASS_DARK);
       drawTex(ctx, "z^\\star_\\lambda=(" + z[0].toFixed(2) + ",\\," + z[1].toFixed(2) + ")", "z*(λ) = (" + z[0].toFixed(2) + ", " + z[1].toFixed(2) + ")",
         sx(z[0]) + 9, sy(z[1]) - 9, { color: BRASS_DARK, px: 11, align: "left", w, flip: sx(z[0]) - 9, plate: true });
+      if (state.showTags) {
+        const tags = [];
+        if (c) tags.push({ text: "what-if: drag", x: sx(c[0]), y: sy(c[1]) + 20 });
+        // tag the corner farthest from z*, so it never sits on z*'s own label
+        let far = null, farD = -1;
+        hull.forEach((v) => { const d = Math.hypot(v[0] - z[0], v[1] - z[1]); if (d > farD) { farD = d; far = v; } });
+        if (far) tags.push({ text: "drag corners", x: sx(far[0]) + 10, y: sy(far[1]) - 14, align: "left" });
+        drawDragTags(ctx, tags, w, h);
+      }
       return { sx, sy, ix, iy };
     },
     hitTest(p, g, state) {
@@ -497,6 +587,7 @@
   /* ---------------- Problem: Newsvendor ---------------- */
   const NEWS = {
     id: "newsvendor", label: "Newsvendor",
+    frontierNote: String.raw`The order \(2-\lambda\) shrinks smoothly as \(\lambda\) grows, so regret creeps up gradually: a smaller order means more customers turned away on busy days. The small steps come from counting dots for miscoverage.`,
     lambdaMax: 1,
     mu: [2],
     dims: 1,
@@ -555,24 +646,31 @@
         missed 0.8 bundles that would each have made $2 profit: regret \(=1.6\). If they only want 1.2, you threw away
         0.5 bundles at $2 each: regret \(=1.0\). Regret compares you with someone who knew the demand in advance.</p>`),
     howTo: {
-      decision: String.raw`<ul>
-        <li>The horizontal axis is the <b>order size</b> \(z\). The curve shows the worst-case cost of each possible order: <b>lower is better</b>.</li>
-        <li><b>Why a V shape?</b> On the left, you order so little that you lose sales even on a slow day. On the right, you order more than a slow day needs and pay for papers that may not sell. The bottom of the V is the sweet spot.</li>
-        <li><b>Amber point \(z^*_\lambda\)</b>: the cautious order, at the bottom of the V. Drag it left or right: since each \(\lambda\) gives exactly one order, this also sets \(\lambda\).</li>
-        <li><b>Coloured strip</b>: the same worst-case cost shown as colour, light = low (good).</li>
-        <li><b>Tall grips</b> \(z_{\min}, z_{\max}\): the smallest and largest order you're allowed (say, a supplier minimum or shelf space). Drag them; if the ideal order falls outside, it sticks to the limit.</li>
-        <li><b>Hollow marker</b>: a what-if order you can drag. The readout above compares it with the cautious order. It does not affect the frontier.</li>
+      decision: String.raw`<p class="shape-why"><b>Why it looks like this.</b> The curve is a <b>V</b>. On the left you order so little
+        that you lose sales even on a slow day, so cost falls as you order more. On the right you order more than
+        a slow day needs and pay for papers that won't sell, so cost rises again. The bottom of the V is the slow-day
+        demand, \(2-\lambda\). Turn \(\lambda\) up and you plan for a slower day, so the whole V and its bottom
+        slide <b>left</b>: a smaller order.</p>
+      <ul>
+        <li>The horizontal axis is the <b>order size</b> \(z\). The curve is the worst-case cost of each order: <b>lower is better</b>.</li>
+        <li><b>Amber point \(z^*_\lambda\)</b> (red halo = draggable): the cautious order, at the bottom of the V. Drag it left or right; since each \(\lambda\) gives exactly one order, this also sets \(\lambda\).</li>
+        <li><b>Coloured strip</b>: the same worst-case cost shown as colour, darker = lower (better).</li>
+        <li><b>Red grips</b> \(z_{\min}, z_{\max}\): the smallest and largest order you're allowed (say, a supplier minimum or shelf space). If the ideal order falls outside, it sticks to the limit.</li>
+        <li><b>Red ring</b>: a what-if order you can drag. The readout above compares it with the cautious order. It does not affect the frontier.</li>
       </ul>`,
-      outcome: String.raw`<ul>
-        <li>The line is <b>demand</b> \(y\), how many bundles customers want. Each dot is one past day. Dots are spread up and down only so they don't overlap; only their left-right position matters.</li>
-        <li><b>Grey shading</b>: where demand can land. Here every level between 1 and 3 is equally likely.</li>
-        <li><b>Amber band</b>: \(\mathcal U_\lambda=[2-\lambda,\,2+\lambda]\), the demand levels you decided to prepare for. It widens as \(\lambda\) grows.</li>
+      outcome: String.raw`<p class="shape-why"><b>Why it looks like this.</b> Demand is equally likely anywhere from 1 to 3, so past
+        days spread evenly along the line. (Dots are spread up and down only so they don't overlap; only their
+        left-right position matters.) The amber band is centred on the average, 2, and reaches \(\lambda\) either side.
+        Widen it and fewer days fall outside. <b>The share of days outside the band is the miscoverage</b> plotted
+        on the right.</p>
+      <ul>
+        <li><b>Amber band</b>: \(\mathcal U_\lambda=[2-\lambda,\,2+\lambda]\), the demand levels you decided to prepare for.</li>
         ${FILLED_HOLLOW}
-        <li><b>Blue vs. red</b>: a blue day fell inside the range you prepared for. A red day fell outside it, a <b>miscoverage</b>. The readout counts the red filled dots; that count is how miscoverage is estimated.</li>
+        <li><b>Blue vs. red</b>: a blue day fell inside the range you prepared for. A red day fell outside it, a <b>miscoverage</b>. The readout counts the red filled dots.</li>
         <li><b>Diamond \(y^*=2-\lambda\)</b>: the slow day your order is planned around. It's the worst case inside the band, not a real observation.</li>
       </ul>`
     },
-    decisionSubtitle: "Worst-case cost as a function of the order quantity \\(z\\), minimised at \\(z^*_\\lambda\\) (\\(\\mu-\\lambda\\) clamped to the feasible interval). Drag the amber marker to choose the order and set \\(\\lambda\\), the tall grips to set \\(z_{\\min}, z_{\\max}\\), or the hollow marker to test a candidate \\(z\\).",
+    decisionSubtitle: "Worst-case cost of each order size. The amber dot \\(z^*_\\lambda\\) at the bottom is the cautious order. Drag it to change \\(\\lambda\\), the red grips to set order limits, or the red ring to try another order.",
     formatZ(z) { return z[0].toFixed(2); },
     defaultCandidate() { return [clamp(NEWS.mu[0], NEWS.bounds[0], NEWS.bounds[1])]; },
     drawDecision(ctx, w, h, state) {
@@ -580,12 +678,13 @@
       const z = state.z[0];
       const g = draw1DDecision(ctx, w, h, {
         zMin: NEWS.range[0], zMax: NEWS.range[1], objective: (zz) => NEWS.robustObjective([zz], state.lambda), zStar: z,
-        candidate: state.candidate ? state.candidate[0] : undefined, bounds: NEWS.bounds,
+        candidate: state.candidate ? state.candidate[0] : undefined, bounds: NEWS.bounds, hover: state.hover,
         xLabel: ["\\text{order quantity } z", "order quantity z"],
         objLabel: ["\\max_{y\\in\\mathcal U_\\lambda} f(y,z)", "worst-case cost"], ticks: [0, 1, 2, 3]
       });
       const bind = z <= NEWS.bounds[0] + 1e-9 ? "\\ (z_{\\min}\\text{ binds})" : z >= NEWS.bounds[1] - 1e-9 ? "\\ (z_{\\max}\\text{ binds})" : "";
       drawTex(ctx, "z^\\star_\\lambda = " + z.toFixed(2) + bind, "z*(λ) = " + z.toFixed(2), g.sx(z) + 10, g.stripY - 14, { color: BRASS_DARK, px: 11, align: "left", w, flip: g.sx(z) - 10, plate: true });
+      if (state.showTags) drawDragTags(ctx, g.tags, w, h);
       return g;
     },
     hitTest(p, g, st) { return hitTest1D(NEWS, p, g, st); },
@@ -596,6 +695,7 @@
   /* ---------------- Problem: Portfolio selection ---------------- */
   const PORT = {
     id: "portfolio", label: "Portfolio selection",
+    frontierNote: String.raw`Up to \(\lambda\approx0.45\) the split stays all-in on asset 1, so regret doesn't change at all. You cover more scenarios <b>for free</b>, and the curve runs flat. Past that, the money starts to spread out and the regret moves.`,
     lambdaMax: 1,
     mu: [2.15, 1.85],
     dims: 2,
@@ -671,24 +771,31 @@
         limits allow) into whichever asset did better. Regret is the return you gave up compared with that perfect
         hindsight.</p>`),
     howTo: {
-      decision: String.raw`<ul>
+      decision: String.raw`<p class="shape-why"><b>Why it looks like this.</b> Asset 1 pays more on average, so moving money into it
+        lowers cost: the curve <b>slopes down to the right</b>. The caution penalty is smallest at 50/50 and bends
+        the curve back up towards the ends, and it bends harder as \(\lambda\) grows. With small \(\lambda\) the
+        slope wins and the lowest point is at the far right (everything in asset 1). Past \(\lambda\approx0.45\) the
+        bend wins and the lowest point moves inwards: you start spreading your money.</p>
+      <ul>
         <li>The horizontal axis is the <b>share in asset 1</b>, \(z_1\), from 0 (all in asset 2) to 1 (all in asset 1). The rest goes into asset 2.</li>
-        <li>The <b>curve</b> is the cautious cost of each split: <b>lower is better</b>. It slopes down towards asset 1 because asset 1 pays more on average; the penalty bends it back up as \(\lambda\) grows.</li>
-        <li><b>Amber point \(z^*_\lambda\)</b>: the cautious split, the lowest point of the curve within your limits. Drag it: each split corresponds to a \(\lambda\), so this also sets \(\lambda\).</li>
-        <li><b>Coloured strip</b>: the same cost shown as colour, light = low (good).</li>
-        <li><b>Tall grips</b> \(\ell, u\): the least and most you're allowed to hold in asset 1. Drag them; if the ideal split falls outside, it sticks to the limit.</li>
-        <li><b>Hollow marker</b>: a what-if split you can drag. The readout above compares it with the cautious split. It does not affect the frontier.</li>
+        <li><b>Amber point \(z^*_\lambda\)</b> (red halo = draggable): the cautious split, the lowest point within your limits. Drag it; each split matches a \(\lambda\), so this also sets \(\lambda\).</li>
+        <li><b>Coloured strip</b>: the same cost shown as colour, darker = lower (better).</li>
+        <li><b>Red grips</b> \(\ell, u\): the least and most you're allowed to hold in asset 1. If the ideal split falls outside, it sticks to the limit.</li>
+        <li><b>Red ring</b>: a what-if split you can drag. The readout above compares it with the cautious split. It does not affect the frontier.</li>
       </ul>`,
-      outcome: String.raw`<ul>
+      outcome: String.raw`<p class="shape-why"><b>Why it looks like this.</b> Each asset's return is equally likely anywhere within 1
+        of its average, so past periods fill a square evenly. The amber box is centred on the averages and reaches
+        \(\lambda\) out each way. Grow \(\lambda\) and it captures more periods. <b>The share of periods outside the
+        box is the miscoverage</b> plotted on the right.</p>
+      <ul>
         <li>The axes are the <b>returns</b> of asset 1 (\(y_1\)) and asset 2 (\(y_2\)). Each dot is one past period. You don't control these.</li>
-        <li><b>Grey shading</b>: where returns can land. Here \(y_1\) is anywhere from 1.15 to 3.15 and \(y_2\) from 0.85 to 2.85, all equally likely.</li>
-        <li><b>Amber box</b>: \(\mathcal U_\lambda\), the return scenarios you prepared for, where each return is within \(\lambda\) of its average. It grows with \(\lambda\).</li>
+        <li><b>Amber box</b>: \(\mathcal U_\lambda\), the return scenarios you prepared for, where each return is within \(\lambda\) of its average.</li>
         ${FILLED_HOLLOW}
-        <li><b>Blue vs. red</b>: a blue period's returns stayed inside the box. A red one fell outside it, a <b>miscoverage</b>. The readout counts the red filled dots; that count is how miscoverage is estimated.</li>
+        <li><b>Blue vs. red</b>: a blue period stayed inside the box. A red one fell outside it, a <b>miscoverage</b>. The readout counts the red filled dots.</li>
         <li><b>Diamond \(y^*=\mu-\lambda\mathbf 1\)</b>: the bad scenario in the box, where both assets return \(\lambda\) less than average. It's constructed, not observed.</li>
       </ul>`
     },
-    decisionSubtitle: "Objective along the two-asset simplex; \\(z^*_\\lambda\\) is its minimiser within the position limits \\(\\ell\\le z_1\\le u\\). Drag the amber marker to choose a split and set \\(\\lambda\\), the tall grips to set the limits, or the hollow marker to test a candidate split.",
+    decisionSubtitle: "Cautious cost of each way to split your money. The amber dot \\(z^*_\\lambda\\) is the lowest point. Drag it to change \\(\\lambda\\), the red grips to set position limits, or the red ring to try another split.",
     formatZ(z) { return "(" + z[0].toFixed(2) + ", " + z[1].toFixed(2) + ")"; },
     defaultCandidate() { const t = clamp(0.5, PORT.bounds[0], PORT.bounds[1]); return [t, 1 - t]; },
     drawDecision(ctx, w, h, state) {
@@ -696,7 +803,7 @@
       const z1 = state.z[0];
       const g = draw1DDecision(ctx, w, h, {
         zMin: 0, zMax: 1, objective: (t) => PORT.robustObjective([t, 1 - t], state.lambda), zStar: z1,
-        candidate: state.candidate ? state.candidate[0] : undefined, bounds: PORT.bounds,
+        candidate: state.candidate ? state.candidate[0] : undefined, bounds: PORT.bounds, hover: state.hover,
         xLabel: ["z_1 \\text{ (weight on asset 1)},\\quad z_2 = 1 - z_1", "z1 (weight on asset 1); z2 = 1 - z1"],
         objLabel: ["-\\mu^\\top z + \\lambda\\,\\|z\\|^2/3", "objective"],
         ticks: [0, 0.25, 0.5, 0.75, 1], fmtTick: (t) => t.toFixed(2)
@@ -704,6 +811,7 @@
       const bind = z1 <= PORT.bounds[0] + 1e-9 ? "\\ (\\ell\\text{ binds})" : z1 >= PORT.bounds[1] - 1e-9 ? "\\ (u\\text{ binds})" : "";
       drawTex(ctx, "z^\\star_\\lambda=(" + z1.toFixed(2) + ",\\," + (1 - z1).toFixed(2) + ")" + bind,
         "z*(λ) = (" + z1.toFixed(2) + ", " + (1 - z1).toFixed(2) + ")", g.sx(z1) + 10, g.stripY - 14, { color: BRASS_DARK, px: 11, align: "left", w, flip: g.sx(z1) - 10, plate: true });
+      if (state.showTags) drawDragTags(ctx, g.tags, w, h);
       return g;
     },
     hitTest(p, g, st) { return hitTest1D(PORT, p, g, st); },
@@ -732,6 +840,7 @@
   function polylineLength(pts) { let l = 0; for (let i = 1; i < pts.length; i++) l += Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]); return l; }
   const SP = {
     id: "shortestpath", label: "Shortest path",
+    frontierNote: String.raw`There are only three choices, so the curve has three <b>flat levels</b>, one per route: C at the bottom right (small \(\lambda\)), then B, then A at the top left. Each jump is the moment the cautious choice switches route.`,
     lambdaMax: 3 * SP_EDGE_HALF,
     mu: [0, 0, 0],
     dims: 3,
@@ -798,7 +907,7 @@
       ]),
     formulaHTML: formulaToggleHTML([
       ["\\(i\\in\\{A,B,C\\}\\)", "Your decision is simply which route to take."],
-      ["\\(\\mu_i\\)", "The route's usual travel time, which is how long it's drawn. Drag the grey nodes to change it."],
+      ["\\(\\mu_i\\)", "The route's usual travel time, which is how long it's drawn. Drag the red nodes to change it."],
       ["\\(w_i\\)", "How many segments the route has: \\(w=(1,2,3)\\) for A, B, C."],
       ["\\(\\lambda\\,w_i\\)", "The delay you budget for: \\(\\lambda\\) extra per segment. More segments mean more that can go wrong."],
       ["\\(\\min_i\\)", "Pick the route with the best <b>usual time + delay budget</b>."]
@@ -817,23 +926,31 @@
       <p><b>What regret looks like here.</b> Once today's times are known, regret is how much longer your route took
         than the route that turned out fastest today.</p>`),
     howTo: {
-      decision: String.raw`<ul>
+      decision: String.raw`<p class="shape-why"><b>Why it looks like this.</b> Each road's label is its usual time plus a delay budget of
+        \(\lambda\) per segment. At \(\lambda=0\) only the usual time counts, so the shortest road wins. As
+        \(\lambda\) grows, roads with more segments pick up delay faster, so the choice drifts towards roads with
+        <b>fewer segments</b>, even if they're longer. On the starting map: C, then B, then A.</p>
+      <ul>
         <li>This panel is a small <b>map</b>: three roads from source to sink. Your decision is which one to take.</li>
-        <li><b>Road colour and label</b>: each route's cautious time, usual time + \(\lambda\) × segments. Light = low (good).</li>
+        <li><b>Road colour and label</b>: each route's cautious time, darker = lower (better).</li>
         <li><b>Amber glow \(z^*_\lambda\)</b>: the cautious route, the lowest label. Move \(\lambda\) and watch it switch.</li>
-        <li><b>Grey nodes</b> (and the <b>square</b> on road A): drag them to reshape the roads. Longer road = longer usual time. The frontier updates.</li>
-        <li><b>Click a road</b> to test it as a what-if (dotted purple). The readout above compares it with the cautious route. It does not affect the frontier.</li>
+        <li><b>Red nodes</b> (and the red <b>square</b> on road A): drag them to reshape the roads. Longer road = longer usual time. The frontier updates.</li>
+        <li><b>Click a road</b> to test it as a what-if (dotted red). The readout above compares it with the cautious route. It does not affect the frontier.</li>
       </ul>`,
-      outcome: String.raw`<ul>
-        <li>The axes are today's <b>total travel time</b> on route A (across) and route B (up). Each dot is one past day. Route C is checked too but not drawn, to keep the picture 2-D.</li>
-        <li><b>Grey shading</b>: where travel times can land. A, a single segment, is equally likely anywhere in its range. B adds up two segments whose delays often partly cancel, so its times bunch up in the middle.</li>
-        <li><b>Amber box</b>: \(\mathcal U_\lambda\), the days you prepared for, where each route's time is within \(\lambda\) of usual. It grows with \(\lambda\).</li>
+      outcome: String.raw`<p class="shape-why"><b>Why it looks like this.</b> The axes are today's total time on route A (across) and
+        route B (up). A is a single segment, so its time is equally likely anywhere in a narrow range. B adds up two
+        segments whose delays often partly cancel, so its times <b>bunch up in the middle</b> (the darker band). The
+        amber box reaches \(\lambda\) from each route's usual time. <b>The share of days outside it is the
+        miscoverage</b> plotted on the right.</p>
+      <ul>
+        <li>Each dot is one past day. Route C is checked too but not drawn, to keep the picture 2-D.</li>
+        <li><b>Amber box</b>: \(\mathcal U_\lambda\), the days you prepared for, where each route's time is within \(\lambda\) of usual.</li>
         ${FILLED_HOLLOW}
-        <li><b>Blue vs. red</b>: a blue day stayed inside what you prepared for. A red day fell outside it on at least one route, a <b>miscoverage</b>. The readout counts the red filled dots; that count is how miscoverage is estimated.</li>
+        <li><b>Blue vs. red</b>: a blue day stayed inside what you prepared for. A red day fell outside it on at least one route, a <b>miscoverage</b>. The readout counts the red filled dots.</li>
         <li><b>Diamond \(y^*\)</b>: the bad day the choice is guarding against, with your chosen route running \(\lambda\) slower than usual. It's constructed, not observed.</li>
       </ul>`
     },
-    decisionSubtitle: "Each path coloured by its robust objective \\(\\mu_i+\\lambda w_i\\); \\(z^*_\\lambda\\) is the cheapest. Drag the grey nodes (or the bulge of road A) to change the path lengths; click a path to test it as a candidate.",
+    decisionSubtitle: "Each road is labelled with its cautious time, usual time + \\(\\lambda\\) × segments; the glowing one, \\(z^*_\\lambda\\), is quickest. Drag the red nodes to reshape the roads, or click a road to compare.",
     formatZ(z) { return "path " + SP_NAMES[z[0]]; },
     defaultCandidate() { return SP.solve(0); },
     drawDecision(ctx, w, h, state) {
@@ -853,7 +970,7 @@
       routes.forEach((r) => {
         ctx.lineCap = "round"; ctx.lineJoin = "round";
         if (r.path === cand) {
-          trace(r.pts); ctx.strokeStyle = PREF; ctx.lineWidth = 7; ctx.setLineDash([0.5, 9]); ctx.stroke(); ctx.setLineDash([]);
+          trace(r.pts); ctx.strokeStyle = DRAG; ctx.lineWidth = 7; ctx.setLineDash([0.5, 9]); ctx.stroke(); ctx.setLineDash([]);
         }
         if (r.path === chosen) { trace(r.pts); ctx.strokeStyle = "rgba(176,127,49,0.45)"; ctx.lineWidth = 11; ctx.stroke(); }
         trace(r.pts); ctx.strokeStyle = colorOf(r.path); ctx.lineWidth = r.path === chosen ? 4 : 3; ctx.stroke();
@@ -861,10 +978,15 @@
       // fixed terminals and draggable nodes
       dot(ctx, SP_SOURCE[0], SP_SOURCE[1], 5, ACCENT);
       dot(ctx, SP_SINK[0], SP_SINK[1], 5, ACCENT);
-      [n.b, n.c1, n.c2].forEach((q) => dot(ctx, q[0], q[1], 6, "#8a9990", "#fbfbf7"));
+      ["b", "c1", "c2"].forEach((key) => {
+        const q = n[key];
+        dragHalo(ctx, q[0], q[1], 6, isHover(state.hover, "node", { key }));
+        dot(ctx, q[0], q[1], 6, DRAG, "#fbfbf7");
+      });
       // grip for road A: a square at its midpoint
-      ctx.fillStyle = "#fbfbf7"; ctx.strokeStyle = ACCENT; ctx.lineWidth = 1.6;
-      ctx.beginPath(); ctx.rect(n.aMid[0] - 4.5, n.aMid[1] - 4.5, 9, 9); ctx.fill(); ctx.stroke();
+      dragHalo(ctx, n.aMid[0], n.aMid[1], 5, isHover(state.hover, "node", { key: "aMid" }));
+      ctx.fillStyle = "#fbfbf7"; ctx.strokeStyle = DRAG; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.rect(n.aMid[0] - 5, n.aMid[1] - 5, 10, 10); ctx.fill(); ctx.stroke();
       label(ctx, "source", SP_SOURCE[0], SP_SOURCE[1] - 12);
       label(ctx, "sink", SP_SINK[0], SP_SINK[1] - 12);
       // objective value per path, next to each route
@@ -874,6 +996,13 @@
         const txt = name + ": " + objs[i].toFixed(2) + (i === chosen ? "  <- z*" : "");
         drawTex(ctx, tex, txt, mids[i][0], mids[i][1], { color: i === chosen ? BRASS_DARK : MUTED, px: 11, align: "center", bold: i === chosen, w, plate: true });
       });
+      if (state.showTags) {
+        drawDragTags(ctx, [
+          { text: "click a road to compare", x: 6, y: 12, align: "left" },
+          { text: "drag", x: n.b[0] + 12, y: n.b[1] + 12, align: "left" },
+          { text: "drag", x: n.aMid[0] + 12, y: n.aMid[1], align: "left" }
+        ], w, h);
+      }
       const segments = [];
       routes.forEach((r) => { for (let i = 1; i < r.pts.length; i++) segments.push({ a: r.pts[i - 1], b: r.pts[i], path: r.path }); });
       return { segments };
@@ -983,7 +1112,9 @@
     densityLayer: null,
     candidate: {},      // per problem id: the user's candidate decision
     decisionGeom: null, // geometry of the last decision-panel draw, for hit-testing
-    drag: null
+    drag: null,
+    hover: null, hoverKey: null, // handle under the pointer, drawn with a stronger halo
+    dragged: {}         // per problem id: has the reader dragged anything yet (hides the tags)
   };
 
   const els = {};
@@ -994,7 +1125,7 @@
       "stat-lambda-hat", "demo-objective", "decision-heading", "decision-subtitle", "decision-legend",
       "outcome-subtitle", "ro-z", "ro-obj", "ro-obj-star", "ro-reg", "ro-reg-star", "lp-vertex-ctl", "ctrl-vertices", "btn-reset-z",
       "problem-intro", "formula-read", "howto-decision", "howto-decision-body", "howto-outcome", "howto-outcome-body",
-      "outcome-readout", "hint-n1", "hint-n2", "hint-conf"].forEach((id) => { els[id] = document.getElementById(id); });
+      "outcome-readout", "howto-frontier-body", "hint-n1", "hint-n2", "hint-conf"].forEach((id) => { els[id] = document.getElementById(id); });
   }
 
   function currentProblem() { return PROBLEMS[state.problemId]; }
@@ -1077,12 +1208,13 @@
     const howTo = problem.howTo || {};
     fill(els["howto-decision-body"], howTo.decision); els["howto-decision"].hidden = !howTo.decision;
     fill(els["howto-outcome-body"], howTo.outcome); els["howto-outcome"].hidden = !howTo.outcome;
+    els["howto-frontier-body"].innerHTML = frontierHowToHTML(problem.frontierNote || "");
     els["outcome-subtitle"].innerHTML = problem.dims > 1
-      ? "Data density, calibration draws, \\(\\mathcal U_\\lambda\\), and the worst case \\(y^*\\) that \\(z^*_\\lambda\\) hedges against (first two coordinates of \\(Y\\))."
-      : "Data density, calibration draws, \\(\\mathcal U_\\lambda\\), and the worst case \\(y^*\\) that \\(z^*_\\lambda\\) hedges against, on the demand line.";
+      ? "Each dot is a past outcome. The amber box is what you prepared for; red dots fell outside it."
+      : "Each dot is a past day's demand. The amber band is what you prepared for; red dots fell outside it.";
     if (window.MathJax && MathJax.typesetPromise) {
       MathJax.typesetPromise([els["demo-objective"], els["decision-subtitle"], els["decision-legend"], els["outcome-subtitle"],
-        els["problem-intro"], els["formula-read"], els["howto-decision-body"], els["howto-outcome-body"]]).catch(() => {});
+        els["problem-intro"], els["formula-read"], els["howto-decision-body"], els["howto-outcome-body"], els["howto-frontier-body"]]).catch(() => {});
     }
   }
 
@@ -1098,7 +1230,9 @@
     const problem = currentProblem();
     const ctx = canvasContext(els["decision-canvas"]);
     const z = problem.solve(state.lambda);
-    state.decisionGeom = problem.drawDecision(ctx, CANVAS_W, CANVAS_H, { z, lambda: state.lambda, candidate: candidateFor(problem) });
+    state.decisionGeom = problem.drawDecision(ctx, CANVAS_W, CANVAS_H, {
+      z, lambda: state.lambda, candidate: candidateFor(problem), hover: state.hover, showTags: !state.dragged[problem.id]
+    });
     renderReadout();
   }
 
@@ -1449,6 +1583,12 @@
       else renderDecision();
     }, 0);
   }
+  function setHover(hit) {
+    const key = hit ? JSON.stringify(hit) : null;
+    if (key === state.hoverKey) return;
+    state.hoverKey = key; state.hover = hit || null;
+    renderDecision();
+  }
   function wireDecisionCanvas() {
     const canvas = els["decision-canvas"];
     const hitAt = (e) => {
@@ -1471,14 +1611,18 @@
       e.preventDefault();
       try { canvas.setPointerCapture(e.pointerId); } catch (err) { /* keep dragging without capture */ }
       state.drag = r.hit;
+      state.dragged[currentProblem().id] = true;
       canvas.style.cursor = "grabbing";
       applyDrag(e);
     });
     canvas.addEventListener("pointermove", (e) => {
       if (state.drag) { applyDrag(e); return; }
       const r = hitAt(e);
-      canvas.style.cursor = r && r.hit ? "grab" : "default";
+      const hit = r && r.hit;
+      canvas.style.cursor = !hit ? "default" : state.problemId === "shortestpath" && hit.type === "candidate" ? "pointer" : "grab";
+      setHover(hit);
     });
+    canvas.addEventListener("pointerleave", () => { if (!state.drag) setHover(null); });
     const release = () => { state.drag = null; canvas.style.cursor = "default"; };
     canvas.addEventListener("pointerup", release);
     canvas.addEventListener("pointercancel", release);
