@@ -1016,3 +1016,68 @@ h3 {
   .control-wide { grid-column: 1; }
   .notation-table td:first-child { width: auto; }
 }
+
+/* ---------- Teaching flow: what changed, coverage counter, staged frontier ---------- */
+
+.what-changed {
+  margin: 12px 0 0;
+  padding: 10px 14px;
+  border: 1px solid var(--line);
+  border-left: 4px solid var(--brass);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--ink);
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+.what-changed b { color: var(--brass-dark); font-family: var(--font-mono); font-weight: 600; }
+.wc-label {
+  margin-right: 6px;
+  color: var(--brass-dark);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.coverage-counter {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 8px;
+  color: var(--ink);
+}
+.cc-big { font-size: 0.95rem; white-space: nowrap; }
+.cc-big b { font-family: var(--font-mono); font-size: 1.15rem; color: var(--accent-dark); }
+.cc-bar {
+  flex: 1;
+  height: 8px;
+  border-radius: 4px;
+  background: rgba(164, 64, 47, 0.28);
+  overflow: hidden;
+}
+.cc-bar i { display: block; height: 100%; background: #7f939e; transition: width 0.4s ease; }
+
+.legend-dot.neutral { background: #7f939e; }
+
+.frontier-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+}
+.frontier-actions .control-button { width: auto; min-height: 32px; font-size: 0.76rem; }
+.frontier-actions .control-button:disabled { opacity: 0.45; cursor: not-allowed; }
+.frontier-actions .control-button.is-done::after { content: " \2713"; }
+.advanced-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+  color: var(--muted);
+  font-size: 0.74rem;
+  cursor: pointer;
+}
+.advanced-toggle input { accent-color: var(--accent); }
+.stat-card[hidden] { display: none; }

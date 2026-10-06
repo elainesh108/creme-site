@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Spectral:ital,wght@0,400;0,500;0,600;0,700;1,400&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=20261006e">
+<link rel="stylesheet" href="style.css?v=20261006f">
 <script>
   window.MathJax = {
     tex: {
@@ -21,7 +21,7 @@
   };
 </script>
 <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js" defer></script>
-<script src="script.js?v=20261006e" defer></script>
+<script src="script.js?v=20261006f" defer></script>
 </head>
 <body>
   <header class="site-header">
@@ -114,6 +114,8 @@
           </div>
         </form>
 
+        <p class="what-changed" id="what-changed" aria-live="polite"></p>
+
         <div class="demo-grid">
           <article class="demo-panel">
             <div class="demo-panel-heading">
@@ -151,14 +153,8 @@
               <p id="outcome-subtitle">Calibration draws vs. \(\mathcal U_\lambda\).</p>
             </div>
             <canvas id="outcome-canvas" width="360" height="300" aria-label="Outcome space"></canvas>
-            <div class="demo-legend">
-              <span><i class="legend-swatch density"></i>data density of \(Y\)</span>
-              <span><i class="legend-swatch set"></i>\(\mathcal U_\lambda(X)\)</span>
-              <span><i class="legend-dot inside"></i>\(Y\in\mathcal U_\lambda\)</span>
-              <span><i class="legend-dot outside"></i>\(Y\notin\mathcal U_\lambda\)</span>
-              <span><i class="legend-dot hollow"></i>held-out \(\mathcal D_2\)</span>
-              <span><i class="legend-diamond"></i>worst case \(y^*=\argmax_{y\in\mathcal U_\lambda} f(y,z^*_\lambda)\)</span>
-            </div>
+            <div class="coverage-counter" id="coverage-counter"></div>
+            <div class="demo-legend" id="outcome-legend"></div>
             <p class="decision-readout outcome-readout" id="outcome-readout"></p>
             <details class="how-to" id="howto-outcome" hidden>
               <summary>How to read this</summary>
@@ -170,18 +166,15 @@
             <div class="demo-panel-heading">
               <p class="panel-question">Was this \(\lambda\) worth it? <span>Each point is one robustness level \(\lambda\).</span></p>
               <h3>Miscoverage &ndash; regret frontier</h3>
-              <p>Each point is one \(\lambda\): how often reality escapes what you prepared for (across) vs. what that caution costs (up). Amber is your current \(\lambda\); the green dot is the recommended \(\hat\lambda\), double-checked.</p>
+              <p>Each point is one \(\lambda\). <b>Lower left is better</b>: fewer outcomes missed, less cost from caution. Amber is your current \(\lambda\). Then use the buttons below the chart to choose and check a \(\lambda\).</p>
             </div>
             <svg id="frontier-svg" viewBox="0 0 360 300" role="img" aria-label="Pareto frontier plot"></svg>
-            <div class="demo-legend">
-              <span><i class="legend-line true"></i>True curve (large-\(N\) reference)</span>
-              <span><i class="legend-line certified"></i>Certified pre-hoc curve \((\mathcal D_1)\)</span>
-              <span><i class="legend-line posthoc"></i>Certified post-hoc curve \((\mathcal D_2)\)</span>
-              <span><i class="legend-dot lambda"></i>Current \(\lambda\)</span>
-              <span><i class="legend-line pref"></i>Preference line (tangent)</span>
-              <span><i class="legend-dot lambdahat"></i>\(\hat\lambda\) pre-hoc</span>
-              <span><i class="legend-dot posthoc"></i>\(\hat\lambda\) post-hoc</span>
+            <div class="frontier-actions">
+              <button class="control-button" id="btn-choose" type="button">1. Choose my trade-off</button>
+              <button class="control-button secondary" id="btn-validate" type="button" disabled>2. Validate choice</button>
+              <label class="advanced-toggle"><input type="checkbox" id="ctrl-advanced"> Advanced / statistical details</label>
             </div>
+            <div class="demo-legend" id="frontier-legend"></div>
             <details class="how-to" id="howto-frontier">
               <summary>How to read this</summary>
               <div class="how-to-body" id="howto-frontier-body"></div>

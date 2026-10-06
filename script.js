@@ -31,6 +31,12 @@
     return "rgb(" + c.join(",") + ")";
   }
 
+  const NEUTRAL = "#7f939e"; // observed outcomes that are covered
+  function mixColor(a, b, t) {
+    const ca = hexToRgb(a), cb = hexToRgb(b);
+    return "rgb(" + ca.map((v, k) => Math.round(v + (cb[k] - v) * t)).join(",") + ")";
+  }
+
   function dot(ctx, x, y, r, fill, stroke) {
     ctx.beginPath(); ctx.arc(x, y, r, 0, 2 * Math.PI);
     ctx.fillStyle = fill; ctx.fill();
@@ -368,15 +374,21 @@
         <li><b>Up:</b> certified regret \(\hat\alpha_R(\lambda)\), a guaranteed upper bound on the average regret
           \[ R_\lambda(Y) = f(Y,z^*_\lambda) - \min_{z\in\mathcal Z} f(Y,z), \]
           i.e. how much worse your cautious decision did than the best decision in hindsight.</li>
-        <li><b>Dashed grey curve:</b> the "true" trade-off, computed from thousands of samples. The solid curves use only your \(n\) data points plus a small safety margin, \(\tfrac{n_1}{n_1+1}\bar\ell + \tfrac{B}{n_1+1}\), so they usually sit a little above and to the right of it. That gap is the price of a guarantee, and it shrinks as \(n\) grows. The margin is also why the solid curves stop at \(1/(n_1+1)\) instead of reaching zero.</li>
-        <li><b>Choosing \(\hat\lambda\):</b> picture the dashed purple line as a ruler slid in from the bottom-left corner until it just touches the curve. The touching point is \(\hat\lambda\). The preference slider tilts the ruler: flatter favours low regret, steeper favours low miscoverage.</li>
-        <li><b>Green point:</b> choosing after looking would flatter the choice, so that same \(\hat\lambda\) is re-scored on the unused \(\mathcal D_2\) data. That gives an honest guarantee.</li>
+        <li><b>Lower left is best</b> (the BEST corner): few outcomes missed and little cost from caution. The brown arrow shows which way the point moves as \(\lambda\) goes up.</li>
+        <li><b>Dashed grey curve</b> (tick <i>Advanced / statistical details</i>): the "true" trade-off, computed from thousands of samples. The solid curves use only your \(n\) data points plus a small safety margin, \(\tfrac{n_1}{n_1+1}\bar\ell + \tfrac{B}{n_1+1}\), so they usually sit a little above and to the right of it. That gap is the price of a guarantee, and it shrinks as \(n\) grows. The margin is also why the solid curves stop at \(1/(n_1+1)\) instead of reaching zero.</li>
+        <li><b>Choosing \(\hat\lambda\)</b> (click <i>Choose my trade-off</i>): picture the dashed purple line as a ruler slid in from the bottom-left corner until it just touches the curve. The touching point is \(\hat\lambda\). The preference slider tilts the ruler: flatter favours low regret, steeper favours low miscoverage.</li>
+        <li><b>Green point</b> (click <i>Validate choice</i>): choosing after looking would flatter the choice, so that same \(\hat\lambda\) is re-scored on the unused \(\mathcal D_2\) data. That gives an honest guarantee.</li>
       </ul>`;
   }
-  const FILLED_HOLLOW = String.raw`<li><b>Filled vs. hollow</b> tells you which half of the data a dot belongs to. Filled dots (\(\mathcal D_1\)) are used to draw the frontier and choose \(\hat\lambda\). Hollow dots (\(\mathcal D_2\)) are kept aside and only used afterwards, to double-check that choice fairly.</li>`;
+  const FILLED_HOLLOW = String.raw`<li><b>Which data?</b> The dots shown are the half of the data (\(\mathcal D_1\)) used to draw the frontier. After you click <i>Validate choice</i>, <b>hollow dots</b> appear too: the other half (\(\mathcal D_2\)), kept aside and used only to double-check the chosen \(\hat\lambda\).</li>`;
 
   const LP = {
     id: "lp", label: "Linear programming",
+    changeClause(from, to, up) {
+      const a = LP.formatZ(from.z), b = LP.formatZ(to.z);
+      return `The range of costs you protect against got ${up ? "wider" : "narrower"}, ` +
+        (a === b ? `but the robust plan stayed at <b>${b}</b>.` : `so the robust plan moved from <b>${a} → ${b}</b>.`);
+    },
     frontierNote: String.raw`The robust plan always sits on a corner, so as \(\lambda\) grows it stays put for a while and then jumps to the next corner. While it stays put, regret doesn't change at all and the curve runs <b>flat</b>; each jump is a <b>step up</b> in regret.`,
     lambdaMax: 1,
     mu: [-1.1, -1],
@@ -466,8 +478,8 @@
         <li><b>Amber point \(z^*_\lambda\)</b>: the robust plan, the darkest corner. Move \(\lambda\) and watch it jump from corner to corner.</li>
         <li><b>Red ring</b>: a what-if plan you can drag. The readout above compares it with \(z^*_\lambda\). It does not affect the frontier.</li>
       </ul>`,
-      outcome: String.raw`<p class="shape-why"><b>Why it looks like this.</b> The grey rectangle is everywhere the per-unit costs can
-        land, all equally likely, so the dots scatter evenly across it. The amber box is centred on the average
+      outcome: String.raw`<p class="shape-why"><b>Why it looks like this.</b> Past outcomes can land anywhere in a rectangle (shaded
+        under <i>Advanced details</i>), all equally likely, so the dots scatter evenly. The amber box is centred on the average
         \(\mu\) and reaches \(\lambda\) out in every direction. A small box leaves most dots outside: lots of
         surprises. Turn \(\lambda\) up and the box swallows more of them. <b>The share of dots outside the box is
         the miscoverage</b> plotted on the right.</p>
@@ -475,7 +487,7 @@
         <li>The axes are \(y_1, y_2\): every point is a <b>possible future</b>, the per-unit costs. You don't control these.</li>
         <li><b>Amber box</b>: \(\mathcal U_\lambda=[\mu_1\pm\lambda]\times[\mu_2\pm\lambda]\), the futures you chose to protect against.</li>
         ${FILLED_HOLLOW}
-        <li><b>Blue vs. red</b>: blue dots are inside the box (covered). Red dots are outside it, a <b>miscoverage</b>: \(I_\lambda=\mathbb 1[Y\notin\mathcal U_\lambda]=1\). The readout counts the red filled dots.</li>
+        <li><b>Grey vs. red</b>: grey dots are inside the box (covered). Red dots are outside it, a <b>miscoverage</b>: \(I_\lambda=\mathbb 1[Y\notin\mathcal U_\lambda]=1\). The readout counts the red filled dots.</li>
         <li><b>Diamond \(y^*=\mu+\lambda\mathbf 1\)</b>: the worst corner of the box, the bad future the robust plan hedges against. It is constructed, not observed.</li>
       </ul>`
     },
@@ -587,6 +599,12 @@
   /* ---------------- Problem: Newsvendor ---------------- */
   const NEWS = {
     id: "newsvendor", label: "Newsvendor",
+    changeClause(from, to, up) {
+      const a = from.z[0].toFixed(2), b = to.z[0].toFixed(2);
+      const start = `You protected against a ${up ? "wider" : "narrower"} demand range, `;
+      if (a === b) return start + `but the order stays at <b>${b}</b> bundles because of your order limits.`;
+      return start + `so the recommended order ${to.z[0] < from.z[0] ? "fell" : "rose"} from <b>${a} → ${b}</b> bundles.`;
+    },
     frontierNote: String.raw`The order \(2-\lambda\) shrinks smoothly as \(\lambda\) grows, so regret creeps up gradually: a smaller order means more customers turned away on busy days. The small steps come from counting dots for miscoverage.`,
     lambdaMax: 1,
     mu: [2],
@@ -666,7 +684,7 @@
       <ul>
         <li><b>Amber band</b>: \(\mathcal U_\lambda=[2-\lambda,\,2+\lambda]\), the demand levels you decided to prepare for.</li>
         ${FILLED_HOLLOW}
-        <li><b>Blue vs. red</b>: a blue day fell inside the range you prepared for. A red day fell outside it, a <b>miscoverage</b>. The readout counts the red filled dots.</li>
+        <li><b>Grey vs. red</b>: a grey day fell inside the range you prepared for. A red day fell outside it, a <b>miscoverage</b>. The readout counts the red filled dots.</li>
         <li><b>Diamond \(y^*=2-\lambda\)</b>: the slow day your order is planned around. It's the worst case inside the band, not a real observation.</li>
       </ul>`
     },
@@ -695,6 +713,13 @@
   /* ---------------- Problem: Portfolio selection ---------------- */
   const PORT = {
     id: "portfolio", label: "Portfolio selection",
+    changeClause(from, to, up) {
+      const split = (z) => Math.round(z[0] * 100) + "/" + (100 - Math.round(z[0] * 100));
+      const a = split(from.z), b = split(to.z);
+      const start = `You prepared for a ${up ? "wider" : "narrower"} range of returns, `;
+      if (a === b) return start + `but the recommended split (asset 1 / asset 2) stays at <b>${b}</b>.`;
+      return start + `so the recommended split (asset 1 / asset 2) moved from <b>${a} → ${b}</b>.`;
+    },
     frontierNote: String.raw`Up to \(\lambda\approx0.45\) the split stays all-in on asset 1, so regret doesn't change at all. You cover more scenarios <b>for free</b>, and the curve runs flat. Past that, the money starts to spread out and the regret moves.`,
     lambdaMax: 1,
     mu: [2.15, 1.85],
@@ -791,7 +816,7 @@
         <li>The axes are the <b>returns</b> of asset 1 (\(y_1\)) and asset 2 (\(y_2\)). Each dot is one past period. You don't control these.</li>
         <li><b>Amber box</b>: \(\mathcal U_\lambda\), the return scenarios you prepared for, where each return is within \(\lambda\) of its average.</li>
         ${FILLED_HOLLOW}
-        <li><b>Blue vs. red</b>: a blue period stayed inside the box. A red one fell outside it, a <b>miscoverage</b>. The readout counts the red filled dots.</li>
+        <li><b>Grey vs. red</b>: a grey period stayed inside the box. A red one fell outside it, a <b>miscoverage</b>. The readout counts the red filled dots.</li>
         <li><b>Diamond \(y^*=\mu-\lambda\mathbf 1\)</b>: the bad scenario in the box, where both assets return \(\lambda\) less than average. It's constructed, not observed.</li>
       </ul>`
     },
@@ -840,6 +865,12 @@
   function polylineLength(pts) { let l = 0; for (let i = 1; i < pts.length; i++) l += Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]); return l; }
   const SP = {
     id: "shortestpath", label: "Shortest path",
+    changeClause(from, to, up) {
+      const a = SP_NAMES[from.z[0]], b = SP_NAMES[to.z[0]];
+      const start = `You became ${up ? "more" : "less"} uncertainty-averse, `;
+      if (a === b) return start + `but route <b>${b}</b> is still the best choice.`;
+      return start + `so the preferred route switched from <b>${a} → ${b}</b>.`;
+    },
     frontierNote: String.raw`There are only three choices, so the curve has three <b>flat levels</b>, one per route: C at the bottom right (small \(\lambda\)), then B, then A at the top left. Each jump is the moment the cautious choice switches route.`,
     lambdaMax: 3 * SP_EDGE_HALF,
     mu: [0, 0, 0],
@@ -939,14 +970,14 @@
       </ul>`,
       outcome: String.raw`<p class="shape-why"><b>Why it looks like this.</b> The axes are today's total time on route A (across) and
         route B (up). A is a single segment, so its time is equally likely anywhere in a narrow range. B adds up two
-        segments whose delays often partly cancel, so its times <b>bunch up in the middle</b> (the darker band). The
+        segments whose delays often partly cancel, so its times <b>bunch up in the middle</b> (shaded under <i>Advanced details</i>). The
         amber box reaches \(\lambda\) from each route's usual time. <b>The share of days outside it is the
         miscoverage</b> plotted on the right.</p>
       <ul>
         <li>Each dot is one past day. Route C is checked too but not drawn, to keep the picture 2-D.</li>
         <li><b>Amber box</b>: \(\mathcal U_\lambda\), the days you prepared for, where each route's time is within \(\lambda\) of usual.</li>
         ${FILLED_HOLLOW}
-        <li><b>Blue vs. red</b>: a blue day stayed inside what you prepared for. A red day fell outside it on at least one route, a <b>miscoverage</b>. The readout counts the red filled dots.</li>
+        <li><b>Grey vs. red</b>: a grey day stayed inside what you prepared for. A red day fell outside it on at least one route, a <b>miscoverage</b>. The readout counts the red filled dots.</li>
         <li><b>Diamond \(y^*\)</b>: the bad day the choice is guarding against, with your chosen route running \(\lambda\) slower than usual. It's constructed, not observed.</li>
       </ul>`
     },
@@ -1114,7 +1145,13 @@
     decisionGeom: null, // geometry of the last decision-panel draw, for hit-testing
     drag: null,
     hover: null, hoverKey: null, // handle under the pointer, drawn with a stronger halo
-    dragged: {}         // per problem id: has the reader dragged anything yet (hides the tags)
+    dragged: {},        // per problem id: has the reader dragged anything yet (hides the tags)
+    // Teaching flow: the frontier reveals its layers one step at a time.
+    stage: "explore",   // "explore" -> "choose" (preference line, lambda-hat) -> "validate" (held-out D2)
+    advanced: false,    // true curve, conformal floor, data density, mu
+    dataVersion: 0,     // bumped whenever the calibration data or the feasible set change
+    changeFrom: null, lastLambdaAt: 0, newGesture: true, // baseline for the "What changed?" line
+    coverPrev: null, coverAnim: {}, animRaf: 0 // dots changing coverage are animated
   };
 
   const els = {};
@@ -1125,7 +1162,9 @@
       "stat-lambda-hat", "demo-objective", "decision-heading", "decision-subtitle", "decision-legend",
       "outcome-subtitle", "ro-z", "ro-obj", "ro-obj-star", "ro-reg", "ro-reg-star", "lp-vertex-ctl", "ctrl-vertices", "btn-reset-z",
       "problem-intro", "formula-read", "howto-decision", "howto-decision-body", "howto-outcome", "howto-outcome-body",
-      "outcome-readout", "howto-frontier-body", "hint-n1", "hint-n2", "hint-conf"].forEach((id) => { els[id] = document.getElementById(id); });
+      "outcome-readout", "howto-frontier-body", "hint-n1",
+      "what-changed", "coverage-counter", "outcome-legend", "frontier-legend", "btn-choose", "btn-validate",
+      "ctrl-advanced", "stat-posthoc-card", "hint-n2", "hint-conf"].forEach((id) => { els[id] = document.getElementById(id); });
   }
 
   function currentProblem() { return PROBLEMS[state.problemId]; }
@@ -1159,6 +1198,7 @@
     const n1 = Math.ceil(state.n / 2), n2 = state.n - n1;
     state.calibD1 = drawSamples(problem, calRng, n1);
     state.calibD2 = drawSamples(problem, calRng, n2);
+    state.dataVersion++;
     state.preHoc = curveFromSamples(problem, state.calibD1, false);
     state.postHoc = curveFromSamples(problem, state.calibD2, false);
     const allR = [].concat(state.trueCurve, state.preHoc, state.postHoc).map((p) => p.aR);
@@ -1311,8 +1351,10 @@
     const mu = problem.mu, lambda = state.lambda, twoD = problem.dims > 1;
     const y0 = h / 2;
 
-    if (!state.densityLayer) state.densityLayer = buildDensityLayer(problem, w, h, g);
-    ctx.drawImage(state.densityLayer, 0, 0);
+    if (state.advanced) {
+      if (!state.densityLayer) state.densityLayer = buildDensityLayer(problem, w, h, g);
+      ctx.drawImage(state.densityLayer, 0, 0);
+    }
 
     // uncertainty box U_lambda
     const bx0 = g.sx(mu[0] - lambda), bx1 = g.sx(mu[0] + lambda);
@@ -1353,28 +1395,57 @@
     }
     drawTex(ctx, problem.axisLabels[0][0], problem.axisLabels[0][1], w - g.padR, axisY + 28, { color: MUTED, px: 10, align: "right", w });
 
-    // samples: filled = D1 (frontier), hollow = D2 (recalibration)
+    // Observed outcomes: one neutral colour, red when missed. The held-out half D2
+    // (hollow) only appears once the reader validates their choice. A dot whose
+    // coverage just changed fades between the two colours and sends out a ring.
     const jitter = (i) => ((i * 37) % 21) - 10;
-    const drawSet = (set, hollow, offset) => set.forEach((y, i) => {
+    const now = performance.now(), ANIM_MS = 650;
+    if (!state.coverPrev || state.coverPrev.version !== state.dataVersion || state.coverPrev.problemId !== problem.id) {
+      state.coverPrev = { version: state.dataVersion, problemId: problem.id, d1: [], d2: [] };
+      state.coverAnim = {};
+    }
+    let animating = false;
+    const drawSet = (set, hollow, offset, tag) => set.forEach((y, i) => {
       const inside = miscoverage(y, mu, lambda) === 0;
+      const key = tag + i, prev = state.coverPrev[tag][i];
+      if (prev !== undefined && prev !== inside) state.coverAnim[key] = { t0: now, inside };
+      state.coverPrev[tag][i] = inside;
       const px = g.sx(y.vec[0]);
       const py = twoD ? g.sy(y.vec[1]) : y0 + jitter(i + offset);
-      const col = inside ? ACCENT : RISK;
-      ctx.globalAlpha = 0.85;
-      ctx.beginPath(); ctx.arc(px, py, 3.2, 0, 2 * Math.PI);
-      if (hollow) { ctx.fillStyle = "#fbfbf7"; ctx.fill(); ctx.strokeStyle = col; ctx.lineWidth = 1.4; ctx.stroke(); }
-      else { ctx.fillStyle = col; ctx.fill(); }
-      ctx.globalAlpha = 1;
+      let col = inside ? NEUTRAL : RISK, t = 1;
+      const an = state.coverAnim[key];
+      if (an) {
+        t = Math.min(1, (now - an.t0) / ANIM_MS);
+        if (t >= 1) delete state.coverAnim[key];
+        else {
+          animating = true;
+          col = mixColor(an.inside ? RISK : NEUTRAL, an.inside ? NEUTRAL : RISK, t);
+          ctx.beginPath(); ctx.arc(px, py, 3.5 + 11 * t, 0, 2 * Math.PI);
+          ctx.strokeStyle = an.inside ? "rgba(60,107,79," + (0.8 * (1 - t)).toFixed(3) + ")" : "rgba(164,64,47," + (0.8 * (1 - t)).toFixed(3) + ")";
+          ctx.lineWidth = 2; ctx.stroke();
+        }
+      }
+      const r = an && t < 1 ? 3.6 + 1.6 * Math.sin(Math.PI * t) : 3.6;
+      ctx.beginPath(); ctx.arc(px, py, r, 0, 2 * Math.PI);
+      if (hollow) { ctx.fillStyle = "#fbfbf7"; ctx.fill(); ctx.strokeStyle = col; ctx.lineWidth = 1.5; ctx.stroke(); }
+      else { ctx.fillStyle = col; ctx.fill(); ctx.strokeStyle = "#fbfbf7"; ctx.lineWidth = 0.8; ctx.stroke(); }
     });
-    drawSet(state.calibD1, false, 0);
-    drawSet(state.calibD2, true, 7);
+    drawSet(state.calibD1, false, 0, "d1");
+    if (state.stage === "validate") drawSet(state.calibD2, true, 7, "d2");
+    if (animating && !state.animRaf) state.animRaf = requestAnimationFrame(() => { state.animRaf = 0; renderOutcome(); });
+
+    const covered = state.calibD1.reduce((k, y) => k + (miscoverage(y, mu, lambda) ? 0 : 1), 0), n1 = state.calibD1.length;
+    els["coverage-counter"].innerHTML = `<span class="cc-big"><b>${covered}/${n1}</b> outcomes covered</span>` +
+      `<span class="cc-bar"><i style="width:${n1 ? (100 * covered / n1).toFixed(1) : 0}%"></i></span>`;
 
     // mu and the worst-case realisation y*
     const z = problem.solve(lambda);
     const ystar = problem.worstCase(lambda, z);
     const muX = g.sx(mu[0]), muY = twoD ? g.sy(mu[1]) : y0;
-    dot(ctx, muX, muY, 3.5, ACCENT, "#fbfbf7");
-    drawTex(ctx, "\\mu", "μ", muX + 6, muY - 6, { color: ACCENT, px: 12, align: "left", bold: true, w });
+    if (state.advanced) {
+      dot(ctx, muX, muY, 3.5, ACCENT, "#fbfbf7");
+      drawTex(ctx, "\\mu", "μ", muX + 6, muY - 6, { color: ACCENT, px: 12, align: "left", bold: true, w });
+    }
     const yx = g.sx(ystar[0]), yy = twoD ? g.sy(ystar[1]) : y0;
     diamond(ctx, yx, yy, 6.5, RISK, "#fbfbf7");
     const overlapsMu = Math.hypot(yx - muX, yy - muY) < 4; // e.g. shortest path when y* only moves a hidden coordinate
@@ -1383,7 +1454,8 @@
 
   function renderFrontier() {
     const svg = els["frontier-svg"];
-    const w = 360, h = 300, padL = 46, padR = 14, padT = 14, padB = 38;
+    const w = 360, h = 300, padL = 58, padR = 12, padT = 12, padB = 54;
+    const st = state.stage, adv = state.advanced;
     const rScale = state.rScale;
     const sx = (aI) => padL + aI * (w - padL - padR);
     const sy = (aR) => h - padB - (aR / rScale) * (h - padB - padT);
@@ -1406,28 +1478,53 @@
       parts.push(`<line x1="${padL - 4}" y1="${fmt(sy(v))}" x2="${padL}" y2="${fmt(sy(v))}" stroke="${MUTED}" stroke-width="1"/>`);
       parts.push(`<text x="${padL - 6}" y="${fmt(sy(v) + 3)}" text-anchor="end" font-family="IBM Plex Mono" font-size="9" fill="${MUTED}">${v.toFixed(2)}</text>`);
     });
-    parts.push(texMarkup("\\text{miscoverage } \\hat\\alpha_I(\\lambda)", "miscoverage αI(λ)", (w + padL) / 2, h - 6, { color: MUTED, px: 10, anchor: "middle" }));
-    parts.push(texMarkup("\\text{regret } \\hat\\alpha_R(\\lambda)", "regret αR(λ)", 14, (h - padB) / 2, { color: MUTED, px: 10, anchor: "middle", rotate: -90 }));
+    // small mathematical labels next to the axes, big plain-English ones outside them
+    parts.push(texMarkup("\\text{certified miscoverage } \\hat\\alpha_I(\\lambda)", "certified miscoverage αI(λ)", (w + padL) / 2, h - padB + 27, { color: MUTED, px: 8.5, anchor: "middle" }));
+    parts.push(texMarkup("\\text{certified regret } \\hat\\alpha_R(\\lambda)", "certified regret αR(λ)", 26, (h - padB + padT) / 2, { color: MUTED, px: 8.5, anchor: "middle", rotate: -90 }));
+    parts.push(`<text x="${fmt((w + padL) / 2)}" y="${h - 6}" text-anchor="middle" font-family="IBM Plex Sans" font-size="11.5" font-weight="600" fill="${INK}">← Fewer outcomes missed</text>`);
+    parts.push(`<text transform="translate(11 ${fmt((h - padB + padT) / 2)}) rotate(-90)" text-anchor="middle" font-family="IBM Plex Sans" font-size="11.5" font-weight="600" fill="${INK}">← Less cost from being conservative</text>`);
+    // the corner both axes point to
+    parts.push(`<text x="${fmt(sx(0) + 7)}" y="${fmt(sy(0) - 8)}" font-family="IBM Plex Sans" font-size="10" font-weight="700" letter-spacing="1.5" fill="${SAFE}" fill-opacity="0.5">↙ BEST</text>`);
 
-    // conformal floor: the certified miscoverage can never go below B/(n+1) = 1/(n1+1)
-    const floor = 1 / (state.calibD1.length + 1);
-    parts.push(`<line x1="${fmt(sx(floor))}" y1="${padT}" x2="${fmt(sx(floor))}" y2="${h - padB}" stroke="${MUTED}" stroke-width="1" stroke-dasharray="1.5 3" stroke-opacity="0.7"/>`);
-    parts.push(texMarkup("\\tfrac{1}{n_1+1}", "1/(n1+1)", sx(floor) + 5, padT + 10, { color: MUTED, px: 10 }));
-
-    // curves
-    parts.push(`<path d="${pathFor(state.trueCurve)}" fill="none" stroke="#9aa79a" stroke-width="1.6" stroke-dasharray="4 3"/>`);
-    parts.push(`<path d="${pathFor(state.postHoc)}" fill="none" stroke="${SAFE}" stroke-width="1.5" stroke-opacity="0.85"/>`);
+    if (adv) {
+      // conformal floor: the certified miscoverage can never go below B/(n+1) = 1/(n1+1)
+      const floor = 1 / (state.calibD1.length + 1);
+      parts.push(`<line x1="${fmt(sx(floor))}" y1="${padT}" x2="${fmt(sx(floor))}" y2="${h - padB}" stroke="${MUTED}" stroke-width="1" stroke-dasharray="1.5 3" stroke-opacity="0.7"/>`);
+      parts.push(texMarkup("\\tfrac{1}{n_1+1}", "1/(n1+1)", sx(floor) + 5, padT + 10, { color: MUTED, px: 10 }));
+      parts.push(`<path d="${pathFor(state.trueCurve)}" fill="none" stroke="#9aa79a" stroke-width="1.6" stroke-dasharray="4 3"/>`);
+    }
+    if (st === "validate") parts.push(`<path d="${pathFor(state.postHoc)}" fill="none" stroke="${SAFE}" stroke-width="1.5" stroke-opacity="0.85"/>`);
     parts.push(`<path d="${pathFor(state.preHoc)}" fill="none" stroke="${ACCENT}" stroke-width="2.2"/>`);
 
+    // "higher lambda" arrow, running beside the curve from low to high lambda
+    {
+      const pts = state.preHoc, A = pts[Math.round(pts.length * 0.15)], B = pts[Math.round(pts.length * 0.85)];
+      const ax = sx(A.aI), ay = sy(A.aR), bx = sx(B.aI), by = sy(B.aR);
+      const len = Math.hypot(bx - ax, by - ay);
+      if (len > 40) {
+        let nx = (by - ay) / len, ny = -(bx - ax) / len;
+        if (nx - ny < 0) { nx = -nx; ny = -ny; } // offset towards the upper right, away from BEST
+        const off = 16, x1 = ax + nx * off, y1 = ay + ny * off, x2 = bx + nx * off, y2 = by + ny * off;
+        const ux = (x2 - x1) / len, uy = (y2 - y1) / len;
+        parts.push(`<line x1="${fmt(x1)}" y1="${fmt(y1)}" x2="${fmt(x2)}" y2="${fmt(y2)}" stroke="${BRASS_DARK}" stroke-width="1.3" stroke-opacity="0.75"/>`);
+        parts.push(`<path d="M${fmt(x2)} ${fmt(y2)} L${fmt(x2 - 7 * ux - 3.5 * uy)} ${fmt(y2 - 7 * uy + 3.5 * ux)} L${fmt(x2 - 7 * ux + 3.5 * uy)} ${fmt(y2 - 7 * uy - 3.5 * ux)} Z" fill="${BRASS_DARK}" fill-opacity="0.85"/>`);
+        const mx = (x1 + x2) / 2 + nx * 11, my = (y1 + y2) / 2 + ny * 11, txt = "higher λ = more robust";
+        const tw = txt.length * 5.1, anchor = nx > 0.35 ? "start" : nx < -0.35 ? "end" : "middle";
+        const lx = Math.min(w - padR - (anchor === "start" ? tw : anchor === "middle" ? tw / 2 : 0), Math.max(padL + (anchor === "end" ? tw : anchor === "middle" ? tw / 2 : 0), mx));
+        const ly = Math.min(h - padB - 4, Math.max(padT + 10, my + 3));
+        parts.push(`<text x="${fmt(lx)}" y="${fmt(ly)}" text-anchor="${anchor}" font-family="IBM Plex Sans" font-size="9.5" font-weight="600" fill="${BRASS_DARK}" stroke="#fbfbf7" stroke-width="3" paint-order="stroke">${txt}</text>`);
+      }
+    }
+
     // preference line: wI*u + wR*v = s in normalised coordinates, clipped to the plot
-    const sel = state.selection;
+    const sel = st === "explore" ? null : state.selection;
     if (sel) {
       const ends = clipLine(sel.wI, sel.wR, sel.score, 0, 1, 0, 1);
       if (ends) {
         parts.push(`<line x1="${fmt(sx(ends[0][0]))}" y1="${fmt(sy(ends[0][1] * rScale))}" x2="${fmt(sx(ends[1][0]))}" y2="${fmt(sy(ends[1][1] * rScale))}" stroke="${PREF}" stroke-width="1.4" stroke-dasharray="6 3"/>`);
       }
       // recalibration shift, pre-hoc (hollow) -> post-hoc (filled)
-      parts.push(`<line x1="${fmt(sx(sel.pre.aI))}" y1="${fmt(sy(sel.pre.aR))}" x2="${fmt(sx(sel.post.aI))}" y2="${fmt(sy(sel.post.aR))}" stroke="${SAFE}" stroke-width="1" stroke-dasharray="2 2"/>`);
+      if (st === "validate") parts.push(`<line x1="${fmt(sx(sel.pre.aI))}" y1="${fmt(sy(sel.pre.aR))}" x2="${fmt(sx(sel.post.aI))}" y2="${fmt(sy(sel.post.aR))}" stroke="${SAFE}" stroke-width="1" stroke-dasharray="2 2"/>`);
     }
 
     // current lambda on the pre-hoc curve (exact estimate, not a grid lookup)
@@ -1436,7 +1533,7 @@
 
     if (sel) {
       parts.push(`<circle cx="${fmt(sx(sel.pre.aI))}" cy="${fmt(sy(sel.pre.aR))}" r="5" fill="#fbfbf7" stroke="${PREF}" stroke-width="1.8"/>`);
-      parts.push(`<circle cx="${fmt(sx(sel.post.aI))}" cy="${fmt(sy(sel.post.aR))}" r="5" fill="${SAFE}" stroke="${SAFE_DARK}" stroke-width="1.2"/>`);
+      if (st === "validate") parts.push(`<circle cx="${fmt(sx(sel.post.aI))}" cy="${fmt(sy(sel.post.aR))}" r="5" fill="${SAFE}" stroke="${SAFE_DARK}" stroke-width="1.2"/>`);
       const lt = "\\hat\\lambda = " + sel.lambda.toFixed(2), lf = "λ^ = " + sel.lambda.toFixed(2);
       const box = texSvg(lt, PREF, 11) || { w: 6 * lf.length, h: 12, baseline: 10 };
       const px0 = sx(sel.pre.aI), py0 = sy(sel.pre.aR);
@@ -1502,10 +1599,82 @@
     const ys = problem.worstCase(state.lambda, problem.solve(state.lambda));
     const num = (v) => v.toFixed(2).replace("-", "\u2212");
     els["outcome-readout"].innerHTML =
-      `Filled \u{1D49F}<sub>1</sub>: <b>${k1}</b> of ${n1} outside \u{1D4B0}<sub>\u03BB</sub>, empirical miscoverage <b>${n1 ? (k1 / n1).toFixed(2) : "\u2013"}</b>, ` +
-      `certified <i>\u03B1&#770;<sub>I</sub></i> = (${k1}+1)/(${n1}+1) = <b>${cur.aI.toFixed(3)}</b>. ` +
-      `Hollow \u{1D49F}<sub>2</sub>: <b>${k2}</b> of ${n2} outside. ` +
+      `<b>${k1}</b> of ${n1} past outcomes fell outside what you prepared for, so the certified miscoverage is ` +
+      `<i>α&#770;<sub>I</sub></i> = (${k1}+1)/(${n1}+1) = <b>${cur.aI.toFixed(3)}</b> (the +1 is a small safety margin). ` +
+      (state.stage === "validate" ? `Held-out check data \u{1D49F}<sub>2</sub>: <b>${k2}</b> of ${n2} outside. ` : "") +
       `Worst case <i>y</i>* = <b>(${ys.map(num).join(", ")})</b>.`;
+  }
+
+  // A picture of the current lambda, to compare against after the reader moves it.
+  function snapshot() {
+    const problem = currentProblem(), est = currentEstimate();
+    const covered = state.calibD1.reduce((k, y) => k + (miscoverage(y, problem.mu, state.lambda) ? 0 : 1), 0);
+    return { problemId: problem.id, version: state.dataVersion, lambda: state.lambda, z: problem.solve(state.lambda).slice(),
+      covered, n1: state.calibD1.length, aR: est.aR };
+  }
+  // Called just before lambda changes: a new gesture (or a pause) starts a new comparison.
+  function beginLambdaChange() {
+    const now = Date.now(), from = state.changeFrom;
+    const stale = !from || from.problemId !== state.problemId || from.version !== state.dataVersion;
+    if (stale || state.newGesture || now - state.lastLambdaAt > 1500) state.changeFrom = snapshot();
+    state.newGesture = false;
+    state.lastLambdaAt = now;
+  }
+  function renderWhatChanged() {
+    const el = els["what-changed"], from = state.changeFrom;
+    const prompt = '<span class="wc-label">What changed?</span> Move the <b>robustness λ</b> slider and this line will explain what your change did.';
+    if (!from || from.problemId !== state.problemId || from.version !== state.dataVersion) { el.innerHTML = prompt; return; }
+    const to = snapshot(), problem = currentProblem();
+    if (Math.abs(to.lambda - from.lambda) < 1e-9) {
+      el.innerHTML = `<span class="wc-label">What changed?</span> λ is back at <b>${to.lambda.toFixed(2)}</b>, so nothing changed.`;
+      return;
+    }
+    const up = to.lambda > from.lambda, f2 = (v) => v.toFixed(2);
+    const dc = to.covered - from.covered, obs = (k, more) => k + (more ? " more" : "") + " past observation" + (k === 1 ? "" : "s");
+    const cover = dc > 0 ? `${obs(dc, true)} ${dc === 1 ? "is" : "are"} now covered (<b>${to.covered}/${to.n1}</b>)`
+      : dc < 0 ? `${obs(-dc)} ${dc === -1 ? "is" : "are"} no longer covered (<b>${to.covered}/${to.n1}</b>)`
+      : `coverage stayed at <b>${to.covered}/${to.n1}</b>`;
+    const dr = to.aR - from.aR;
+    const regret = Math.abs(dr) < 5e-4 ? `certified regret stayed at <b>${f2(to.aR)}</b>`
+      : `certified regret ${dr > 0 ? "rose" : "fell"} from <b>${f2(from.aR)} → ${f2(to.aR)}</b>`;
+    el.innerHTML = `<span class="wc-label">What changed?</span> You ${up ? "increased" : "decreased"} robustness from ` +
+      `<b>${f2(from.lambda)} → ${f2(to.lambda)}</b>. ${problem.changeClause(from, to, up)} ` +
+      `${cover.charAt(0).toUpperCase() + cover.slice(1)}, and ${regret}.`;
+  }
+
+  /* ---------------- Teaching stages ---------------- */
+  function setStage(stage) {
+    state.stage = stage;
+    renderStage();
+    renderAll(stage === "validate" ? 5 : stage === "choose" ? 4 : 2);
+  }
+  function renderStage() {
+    const st = state.stage;
+    els["btn-choose"].classList.toggle("is-done", st !== "explore");
+    els["btn-validate"].disabled = st === "explore";
+    els["btn-validate"].classList.toggle("is-done", st === "validate");
+    els["stat-posthoc-card"].hidden = st !== "validate";
+    els["ctrl-advanced"].checked = state.advanced;
+    renderLegends();
+  }
+  function renderLegends() {
+    const st = state.stage, adv = state.advanced;
+    const o = [];
+    if (adv) o.push('<span><i class="legend-swatch density"></i>where outcomes can land</span>');
+    o.push('<span><i class="legend-swatch set"></i>what you prepared for, \\(\\mathcal U_\\lambda\\)</span>',
+      '<span><i class="legend-dot neutral"></i>covered outcome</span>',
+      '<span><i class="legend-dot outside"></i>missed outcome</span>');
+    if (st === "validate") o.push('<span><i class="legend-dot hollow"></i>held-out check data \\(\\mathcal D_2\\)</span>');
+    o.push('<span><i class="legend-diamond"></i>worst case \\(y^*\\) the decision braces for</span>');
+    els["outcome-legend"].innerHTML = o.join("");
+    const f = [];
+    if (adv) f.push('<span><i class="legend-line true"></i>True curve (large-\\(N\\) reference)</span>');
+    f.push('<span><i class="legend-line certified"></i>Certified curve \\((\\mathcal D_1)\\)</span>',
+      '<span><i class="legend-dot lambda"></i>Current \\(\\lambda\\)</span>');
+    if (st !== "explore") f.push('<span><i class="legend-line pref"></i>Your preference (ruler)</span>', '<span><i class="legend-dot lambdahat"></i>Recommended \\(\\hat\\lambda\\)</span>');
+    if (st === "validate") f.push('<span><i class="legend-line posthoc"></i>Re-checked on \\(\\mathcal D_2\\)</span>', '<span><i class="legend-dot posthoc"></i>\\(\\hat\\lambda\\) re-checked</span>');
+    els["frontier-legend"].innerHTML = f.join("");
+    if (window.MathJax && MathJax.typesetPromise) MathJax.typesetPromise([els["outcome-legend"], els["frontier-legend"]]).catch(() => {});
   }
 
   function setStep(n) {
@@ -1519,11 +1688,11 @@
     renderOutcome();
     renderFrontier();
     renderStats();
+    renderWhatChanged();
     if (stepHint) setStep(stepHint);
   }
 
   /* ---------------- Events ---------------- */
-  let stepTimer = null;
   function updatePrefLabel() {
     const t = state.pref;
     const word = t < 0.4 ? "favor low miscoverage" : t > 0.6 ? "favor low regret" : "balanced";
@@ -1538,13 +1707,13 @@
 
   function onPreferenceChange() {
     computeSelection();
-    renderAll(4);
-    clearTimeout(stepTimer);
-    stepTimer = setTimeout(() => setStep(5), 260);
+    renderAll(state.stage === "validate" ? 5 : 4);
   }
 
   function switchProblem(id) {
     state.problemId = id;
+    state.stage = "explore";
+    state.changeFrom = null;
     const problem = PROBLEMS[id];
     els["ctrl-lambda"].max = String(problem.lambdaMax);
     els["ctrl-lambda"].step = String(problem.lambdaMax / LAMBDA_STEPS);
@@ -1557,6 +1726,7 @@
     renderObjective();
     state.densityLayer = null;
     els["lp-vertex-ctl"].hidden = id !== "lp";
+    renderStage();
     recomputeReference();
     recomputeCalibration();
     renderAll(2);
@@ -1602,7 +1772,7 @@
       const scope = { candidate: candidateFor(problem) };
       const kind = problem.drag(state.drag, canvasPoint(canvas, e), state.decisionGeom, scope);
       state.candidate[problem.id] = scope.candidate;
-      if (kind === "lambda") { setLambda(scope.lambda); scheduleInteractive("lambda"); return; }
+      if (kind === "lambda") { beginLambdaChange(); setLambda(scope.lambda); scheduleInteractive("lambda"); return; }
       scheduleInteractive(kind === "recompute");
     };
     canvas.addEventListener("pointerdown", (e) => {
@@ -1612,6 +1782,7 @@
       try { canvas.setPointerCapture(e.pointerId); } catch (err) { /* keep dragging without capture */ }
       state.drag = r.hit;
       state.dragged[currentProblem().id] = true;
+      state.newGesture = true;
       canvas.style.cursor = "grabbing";
       applyDrag(e);
     });
@@ -1671,7 +1842,9 @@
       tab.addEventListener("click", () => switchProblem(tab.dataset.problem));
     });
 
+    ["pointerdown", "keydown"].forEach((ev) => els["ctrl-lambda"].addEventListener(ev, () => { state.newGesture = true; }));
     els["ctrl-lambda"].addEventListener("input", (e) => {
+      beginLambdaChange();
       setLambda(parseFloat(e.target.value));
       renderAll(2);
     });
@@ -1689,13 +1862,20 @@
     els["ctrl-pref"].addEventListener("input", (e) => {
       state.pref = parseFloat(e.target.value);
       updatePrefLabel();
+      if (state.stage === "explore") { state.stage = "choose"; renderStage(); }
       onPreferenceChange();
     });
     els["btn-select"].addEventListener("click", () => {
       if (!state.selection) return;
+      state.newGesture = true;
+      beginLambdaChange();
       setLambda(state.selection.lambda);
-      renderAll(5);
+      if (state.stage === "explore") { state.stage = "choose"; renderStage(); }
+      renderAll(4);
     });
+    els["btn-choose"].addEventListener("click", () => setStage(state.stage === "explore" ? "choose" : state.stage));
+    els["btn-validate"].addEventListener("click", () => { if (state.stage !== "explore") setStage("validate"); });
+    els["ctrl-advanced"].addEventListener("change", (e) => { state.advanced = e.target.checked; renderLegends(); renderAll(); });
     els["btn-resample"].addEventListener("click", () => {
       state.seed = Math.floor(Math.random() * 1e9);
       recomputeReference();
